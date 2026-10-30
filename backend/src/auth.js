@@ -2,6 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { db } from './db.js';
+import { seedAgents } from './defaultAgents.js';
 
 const router = Router();
 const sign = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -15,6 +16,7 @@ router.post('/signup', (req, res) => {
   const { lastInsertRowid } = db
     .prepare('INSERT INTO users (email, password) VALUES (?, ?)')
     .run(email, bcrypt.hashSync(password, 10));
+  seedAgents(Number(lastInsertRowid));
   res.status(201).json({ token: sign(Number(lastInsertRowid)) });
 });
 
