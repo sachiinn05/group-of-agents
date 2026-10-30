@@ -7,6 +7,11 @@ export const User = model(
   new Schema({
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
+    // Set when the user connects Gmail via Google OAuth.
+    google: {
+      email: String,
+      refreshToken: String,
+    },
   })
 );
 
