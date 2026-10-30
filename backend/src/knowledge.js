@@ -1,8 +1,9 @@
 import { Document } from './db.js';
 
-const WHOLE_IF_UNDER = 6000; // small knowledge bases are sent whole
-const CHUNK_SIZE = 700;
-const TOP_CHUNKS = 5;
+// Kept small on purpose: the free LLM tier allows few tokens per minute, so every request counts.
+const WHOLE_IF_UNDER = 4000; // small knowledge bases are sent whole
+const CHUNK_SIZE = 600;
+const TOP_CHUNKS = 4;
 
 const tokenize = (s) => (s.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).filter((t) => t.length > 1);
 
