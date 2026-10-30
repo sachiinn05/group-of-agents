@@ -5,11 +5,11 @@ export const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
 export const clearToken = () => localStorage.removeItem(TOKEN_KEY);
 
 // `body` may be a plain object (sent as JSON) or FormData (sent as multipart).
-async function request(path, body) {
+async function request(path, { method, body } = {}) {
   const token = getToken();
   const isForm = body instanceof FormData;
   const res = await fetch(path, {
-    method: body ? 'POST' : 'GET',
+    method: method || (body ? 'POST' : 'GET'),
     headers: {
       ...(body && !isForm && { 'Content-Type': 'application/json' }),
       ...(token && { Authorization: `Bearer ${token}` }),
@@ -25,19 +25,26 @@ async function request(path, body) {
   return data;
 }
 
-export const login = (email, password) => request('/auth/login', { email, password });
-export const signup = (email, password) => request('/auth/signup', { email, password });
-export const getAgents = () => request('/agents');
-export const getMessages = (id) => request(`/agents/${id}/messages`);
+// ---- owner ----
+export const login = (email, password) => request('/auth/login', { body: { email, password } });
+export const signup = (email, password) => request('/auth/signup', { body: { email, password } });
 
-export function sendMessage(id, message, files = []) {
-  if (files.length === 0) return request(`/agents/${id}/chat`, { message });
+export const getBusiness = () => request('/business');
+export const createBusiness = (name, info) => request('/business', { body: { name, info } });
+export const updateBusiness = (name, info) => request('/business', { method: 'PUT', body: { name, info } });
+
+export function uploadDocuments(files) {
   const form = new FormData();
-  form.append('message', message);
   files.forEach((f) => form.append('files', f));
-  return request(`/agents/${id}/chat`, form);
+  return request('/business/documents', { body: form });
 }
+export const deleteDocument = (id) => request(`/business/documents/${id}`, { method: 'DELETE' });
 
-export const getGmailStatus = () => request('/google/status');
-export const getGmailUrl = () => request('/google/url');
-export const disconnectGmail = () => request('/google/disconnect', {});
+export const getLeads = () => request('/business/leads');
+export const setLeadStatus = (id, status) => request(`/business/leads/${id}`, { method: 'PATCH', body: { status } });
+
+// ---- customer (no login) ----
+export const getShop = (slug) => request(`/public/${slug}`);
+export const getShopHistory = (slug, sessionId) => request(`/public/${slug}/history?sessionId=${sessionId}`);
+export const sendShopMessage = (slug, sessionId, message) =>
+  request(`/public/${slug}/chat`, { body: { sessionId, message } });
