@@ -8,7 +8,7 @@ import { runToolLoop } from './toolLoop.js';
 const router = Router();
 
 const MAX_MESSAGE = 1000;
-const HISTORY = 12;
+const HISTORY = 8;
 
 // Light per-IP limit so the shop link can't be used to burn the LLM quota.
 const hits = new Map();
@@ -28,12 +28,14 @@ const saveLeadTool = {
       'Save a customer who wants to order, reserve, or get a callback, so the owner can contact them. Needs a phone number.',
     parameters: {
       type: 'object',
+      // Types allow null: the model sometimes calls this before it has the phone number, and the
+      // provider would reject the whole request. saveLead() checks the phone and tells the model to ask.
       properties: {
-        name: { type: 'string', description: 'Customer name' },
-        phone: { type: 'string', description: 'Customer phone number' },
+        name: { type: ['string', 'null'], description: 'Customer name' },
+        phone: { type: ['string', 'null'], description: 'Customer phone number. Never guess it.' },
         note: { type: 'string', description: 'What they want: item, quantity, delivery address, question to check' },
       },
-      required: ['phone', 'note'],
+      required: ['note'],
     },
   },
 };
@@ -103,7 +105,13 @@ router.post('/:slug/chat', async (req, res) => {
     await PublicMessage.create({ businessId: business._id, sessionId, role: 'assistant', content: reply });
     res.json({ reply, leadSaved: state.leadSaved });
   } catch (e) {
-    res.status(502).json({ error: 'The assistant is unavailable right now. Please try again.' });
+    console.error('public chat failed:', e.message);
+    const busy = e.status === 429;
+    res.status(busy ? 503 : 502).json({
+      error: busy
+        ? 'The assistant is busy right now. Please try again in a few seconds.'
+        : 'The assistant is unavailable right now. Please try again.',
+    });
   }
 });
 
