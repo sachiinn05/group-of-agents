@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { db } from './db.js';
+import mongoose from 'mongoose';
+import { Agent, Message } from './db.js';
 import { requireAuth } from './auth.js';
 import { ask } from './llm.js';
 
@@ -7,39 +8,35 @@ const router = Router();
 router.use(requireAuth);
 
 const getAgent = (id, userId) =>
-  db.prepare('SELECT * FROM agents WHERE id = ? AND user_id = ?').get(id, userId);
+  mongoose.isValidObjectId(id) ? Agent.findOne({ _id: id, userId }) : null;
 
 // List the logged-in user's agents
-router.get('/', (req, res) => {
-  res.json(db.prepare('SELECT id, name, role FROM agents WHERE user_id = ?').all(req.userId));
+router.get('/', async (req, res) => {
+  const agents = await Agent.find({ userId: req.userId }, 'name role');
+  res.json(agents.map((a) => ({ id: a.id, name: a.name, role: a.role })));
 });
 
 // Create a custom agent
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { name, role, system_prompt } = req.body;
   if (!name || !system_prompt) return res.status(400).json({ error: 'name and system_prompt required' });
-  const { lastInsertRowid } = db
-    .prepare('INSERT INTO agents (user_id, name, role, system_prompt) VALUES (?, ?, ?, ?)')
-    .run(req.userId, name, role || '', system_prompt);
-  res.status(201).json({ id: Number(lastInsertRowid) });
+  const agent = await Agent.create({ userId: req.userId, name, role, systemPrompt: system_prompt });
+  res.status(201).json({ id: agent.id });
 });
 
 // Chat with one agent (history is kept per agent)
 router.post('/:id/chat', async (req, res) => {
-  const agent = getAgent(req.params.id, req.userId);
+  const agent = await getAgent(req.params.id, req.userId);
   if (!agent) return res.status(404).json({ error: 'agent not found' });
   const { message } = req.body;
   if (!message) return res.status(400).json({ error: 'message required' });
 
-  const save = db.prepare('INSERT INTO messages (agent_id, role, content) VALUES (?, ?, ?)');
-  save.run(agent.id, 'user', message);
-  const history = db
-    .prepare('SELECT role, content FROM messages WHERE agent_id = ? ORDER BY id DESC LIMIT 20')
-    .all(agent.id)
-    .reverse();
+  await Message.create({ agentId: agent._id, role: 'user', content: message });
+  const recent = await Message.find({ agentId: agent._id }).sort({ _id: -1 }).limit(20);
+  const history = recent.reverse().map((m) => ({ role: m.role, content: m.content }));
   try {
-    const reply = await ask(agent.system_prompt, history);
-    save.run(agent.id, 'assistant', reply);
+    const reply = await ask(agent.systemPrompt, history);
+    await Message.create({ agentId: agent._id, role: 'assistant', content: reply });
     res.json({ agent: agent.name, reply });
   } catch (e) {
     res.status(502).json({ error: e.message });

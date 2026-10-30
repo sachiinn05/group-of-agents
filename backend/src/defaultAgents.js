@@ -1,4 +1,4 @@
-import { db } from './db.js';
+import { Agent } from './db.js';
 
 const TEMPLATES = [
   ['Researcher', 'Finds and summarizes information', 'You are a researcher. Give clear, accurate, concise summaries.'],
@@ -8,6 +8,7 @@ const TEMPLATES = [
 ];
 
 export function seedAgents(userId) {
-  const insert = db.prepare('INSERT INTO agents (user_id, name, role, system_prompt) VALUES (?, ?, ?, ?)');
-  for (const [name, role, prompt] of TEMPLATES) insert.run(userId, name, role, prompt);
+  return Agent.insertMany(
+    TEMPLATES.map(([name, role, systemPrompt]) => ({ userId, name, role, systemPrompt }))
+  );
 }
