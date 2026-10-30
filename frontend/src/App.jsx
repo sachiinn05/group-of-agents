@@ -15,6 +15,12 @@ export default function App() {
   const [loggedIn, setLoggedIn] = useState(!!getToken());
   const [agents, setAgents] = useState([]);
   const [selected, setSelected] = useState(null);
+  // Google sends the browser back to /?gmail=connected (or error:...); read it once, then tidy the URL.
+  const [gmailNotice] = useState(() => new URLSearchParams(window.location.search).get('gmail'));
+
+  useEffect(() => {
+    if (gmailNotice) window.history.replaceState({}, '', window.location.pathname);
+  }, [gmailNotice]);
 
   function logout() {
     clearToken();
@@ -28,7 +34,9 @@ export default function App() {
     getAgents()
       .then((list) => {
         setAgents(list);
-        setSelected(list[0] || null);
+        // Coming back from Google, land on the agent that uses Gmail.
+        const emailAgent = gmailNotice && list.find((a) => a.tools?.includes('send_email'));
+        setSelected(emailAgent || list[0] || null);
       })
       .catch((err) => err.status === 401 && logout());
   }, [loggedIn]);
@@ -60,7 +68,7 @@ export default function App() {
           <button className="logout" onClick={logout}>Log out</button>
         </div>
       </aside>
-      {selected ? <Chat key={selected.id} agent={selected} /> : <div className="empty">No agents yet.</div>}
+      {selected ? <Chat key={selected.id} agent={selected} gmailNotice={gmailNotice} /> : <div className="empty">No agents yet.</div>}
     </div>
   );
 }

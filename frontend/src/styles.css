@@ -141,6 +141,39 @@ button { cursor: pointer; }
 .msg table { border-collapse: collapse; }
 .msg th, .msg td { border: 1px solid var(--border); padding: 5px 9px; }
 
+.chat-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+.chat-head h2 { width: 100%; }
+
+.gmail-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-left: auto; font-size: 13px; }
+.gmail-bar .ok { color: #5fd38d; }
+.gmail-bar .muted { color: var(--muted); }
+.btn.small { padding: 6px 12px; font-size: 13px; }
+
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.chips.pending { padding: 8px 20px 0; margin: 0; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 13px;
+}
+.chip button { background: none; border: 0; color: var(--muted); padding: 0 2px; font-size: 16px; line-height: 1; }
+.chip button:hover { color: var(--danger); }
+
+.attach {
+  padding: 0 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 18px;
+}
+.attach:hover:not(:disabled) { background: var(--panel-2); }
+.attach:disabled { opacity: 0.5; cursor: default; }
+
 .empty { margin: auto; color: var(--muted); text-align: center; }
 
 .typing { color: var(--muted); align-self: flex-start; }
