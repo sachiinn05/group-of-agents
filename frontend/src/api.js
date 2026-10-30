@@ -40,6 +40,11 @@ export function uploadDocuments(files) {
 }
 export const deleteDocument = (id) => request(`/business/documents/${id}`, { method: 'DELETE' });
 
+export const getTelegram = () => request('/business/telegram');
+export const linkTelegram = () => request('/business/telegram/link', { method: 'POST', body: {} });
+export const testTelegram = () => request('/business/telegram/test', { method: 'POST', body: {} });
+export const disconnectTelegram = () => request('/business/telegram/disconnect', { method: 'POST', body: {} });
+
 export const getLeads = () => request('/business/leads');
 export const setLeadStatus = (id, status) => request(`/business/leads/${id}`, { method: 'PATCH', body: { status } });
 

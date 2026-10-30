@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import Alerts from './Alerts.jsx';
 import { createBusiness, updateBusiness, uploadDocuments, deleteDocument } from './api.js';
 
 const FIELDS = [
@@ -78,6 +79,8 @@ export default function ShopSetup({ business, onChanged }) {
           </div>
         </section>
       )}
+
+      {business && <Alerts />}
 
       <form className="card" onSubmit={save}>
         <h3>{business ? 'Shop details' : 'Tell us about your shop'}</h3>
