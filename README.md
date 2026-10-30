@@ -1,10 +1,20 @@
-# Groups of Agents
+# Shop Agent
 
-Log in and get a group of AI agents (career, developer, learning). Each agent has its own chat.
-The **Email Writer** agent can read files you attach and send emails from your Gmail.
+A shopkeeper signs up, enters shop details, uploads a price list or FAQ, and gets an AI assistant
+with a public link. Customers chat with it 24/7. When a customer wants to order or get a callback,
+the agent saves their name and phone as a **lead** for the owner.
 
 - `backend/` Express, MongoDB (Mongoose), JWT auth, Groq LLM
 - `frontend/` React (Vite)
+
+## How it works
+
+**Owner:** sign up, fill in the shop details, upload documents (PDF, Word, text; 5 MB each), share the link.
+Open **Customer leads** to see who wants an order and call them back.
+
+**Customer:** opens `/shop/<slug>` (no login) and chats. The agent answers only from the shop details and
+the uploaded documents, replies in English, Hindi or Hinglish, never invents prices, and refuses
+off-topic requests. If it does not know, it says the owner will check and takes the customer's number.
 
 ## Run locally
 
@@ -16,34 +26,20 @@ cd frontend && npm install && npm run dev             # UI (Vite prints the addr
 ```
 
 `backend/.env` needs `GROQ_API_KEY`, `JWT_SECRET`, `MONGO_URI`. Never commit it.
-Set `FRONTEND_URL` to the exact address Vite prints (for example `http://localhost:5173`).
 
-## Attachments
+## API
 
-Click the paperclip in any chat. PDF, Word (.docx), .txt, .csv, .md and .json, up to 3 files of 5 MB each.
-The agent reads the text. The Email Writer can also attach the original file to an email.
+| Who | Route |
+|---|---|
+| Owner (JWT) | `POST /auth/signup`, `POST /auth/login` |
+| Owner | `GET/POST/PUT /business`, `POST /business/documents`, `DELETE /business/documents/:id` |
+| Owner | `GET /business/leads`, `PATCH /business/leads/:id` |
+| Customer (no login) | `GET /public/:slug`, `GET /public/:slug/history`, `POST /public/:slug/chat` |
 
-## Connect Gmail (for the Email Writer)
+## Known limits
 
-1. Go to https://console.cloud.google.com and create a project.
-2. **APIs & Services > Library**: enable the **Gmail API**.
-3. **APIs & Services > OAuth consent screen**: choose External, fill the app name and your email.
-   Under **Test users**, add the Gmail address you will send from.
-4. Add the scope `https://www.googleapis.com/auth/gmail.send`.
-5. **Credentials > Create credentials > OAuth client ID** (Web application).
-   Authorized redirect URI: `http://localhost:5000/google/callback`
-6. Put the client ID and secret in `backend/.env`:
-   ```
-   GOOGLE_CLIENT_ID=...
-   GOOGLE_CLIENT_SECRET=...
-   ```
-7. Restart the backend, open the Email Writer and click **Connect Gmail**.
-
-While the app is in Google's "Testing" mode, only the listed test users can connect, and the
-connection expires after 7 days (you just click Connect Gmail again).
-
-## How automatic sending works
-
-The Email Writer sends as soon as you ask, with no preview. Safeguards: it only sends to an
-address you typed in the chat or that is in your attached file, one recipient per email, and every
-sent email is shown in the chat as `Sent from ... to ...`.
+- **LLM rate limit.** The free Groq tier allows about 8,000 tokens per minute for the whole app. Each
+  customer message costs roughly 1,000 to 2,000 tokens, so a busy shop will hit it. The backend waits and
+  retries, then tells the customer to try again. A paid Groq plan or another provider removes this limit
+  (only `backend/src/llm.js` talks to the provider).
+- Alerts to the owner (email, Telegram) and an embeddable website widget are not built yet.
