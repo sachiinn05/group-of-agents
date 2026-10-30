@@ -67,8 +67,10 @@ export async function runAgent(agent, history, userId) {
 
 // List the logged-in user's agents
 router.get('/', async (req, res) => {
-  const agents = await Agent.find({ userId: req.userId }, 'name role category');
-  res.json(agents.map((a) => ({ id: a.id, name: a.name, role: a.role, category: a.category })));
+  const agents = await Agent.find({ userId: req.userId }, 'name role category tools');
+  res.json(
+    agents.map((a) => ({ id: a.id, name: a.name, role: a.role, category: a.category, tools: a.tools }))
+  );
 });
 
 // Saved chat history for one agent
