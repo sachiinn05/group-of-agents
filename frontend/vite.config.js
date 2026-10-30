@@ -8,6 +8,9 @@ export default defineConfig({
     proxy: {
       '/auth': 'http://localhost:5000',
       '/agents': 'http://localhost:5000',
+      '/google/status': 'http://localhost:5000',
+      '/google/url': 'http://localhost:5000',
+      '/google/disconnect': 'http://localhost:5000',
     },
   },
 });
