@@ -1,24 +1,35 @@
-import { DatabaseSync } from 'node:sqlite';
+import mongoose from 'mongoose';
 
-export const db = new DatabaseSync('agents.db');
+const { Schema, model } = mongoose;
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS agents (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL REFERENCES users(id),
-    name TEXT NOT NULL,
-    role TEXT NOT NULL,
-    system_prompt TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    agent_id INTEGER NOT NULL REFERENCES agents(id),
-    role TEXT NOT NULL,
-    content TEXT NOT NULL
-  );
-`);
+export const User = model(
+  'User',
+  new Schema({
+    email: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+  })
+);
+
+export const Agent = model(
+  'Agent',
+  new Schema({
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    name: { type: String, required: true },
+    role: { type: String, default: '' },
+    systemPrompt: { type: String, required: true },
+  })
+);
+
+export const Message = model(
+  'Message',
+  new Schema(
+    {
+      agentId: { type: Schema.Types.ObjectId, ref: 'Agent', required: true, index: true },
+      role: { type: String, enum: ['user', 'assistant'], required: true },
+      content: { type: String, required: true },
+    },
+    { timestamps: true }
+  )
+);
+
+export const connectDb = () => mongoose.connect(process.env.MONGO_URI);
