@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { randomBytes } from 'node:crypto';
+import { telegramConfigured, getBotUsername, sendTelegram } from './telegram.js';
 import mongoose from 'mongoose';
 import multer from 'multer';
 import { Business, Document, Lead } from './db.js';
@@ -90,6 +92,47 @@ router.delete('/documents/:id', async (req, res) => {
   if (!business || !mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'not found' });
   const { deletedCount } = await Document.deleteOne({ _id: req.params.id, businessId: business._id });
   if (!deletedCount) return res.status(404).json({ error: 'not found' });
+  res.json({ ok: true });
+});
+
+// ---- Telegram alerts ----
+
+// Is the bot set up on the server, and is this owner's Telegram linked?
+router.get('/telegram', async (req, res) => {
+  const business = await mine(req);
+  if (!business) return res.status(404).json({ error: 'no shop yet' });
+  res.json({ configured: telegramConfigured(), connected: !!business.telegram?.chatId });
+});
+
+// Starts linking: returns a t.me link that opens the bot with a one-time code.
+router.post('/telegram/link', async (req, res) => {
+  const business = await mine(req);
+  if (!business) return res.status(404).json({ error: 'no shop yet' });
+  if (!telegramConfigured()) return res.status(503).json({ error: 'Telegram alerts are not set up on this server yet.' });
+  const linkCode = randomBytes(8).toString('hex');
+  await Business.updateOne({ _id: business._id }, { 'telegram.linkCode': linkCode });
+  try {
+    res.json({ url: `https://t.me/${await getBotUsername()}?start=${linkCode}` });
+  } catch (e) {
+    res.status(502).json({ error: 'Could not reach Telegram. Check the bot token.' });
+  }
+});
+
+router.post('/telegram/test', async (req, res) => {
+  const business = await mine(req);
+  if (!business?.telegram?.chatId) return res.status(400).json({ error: 'Telegram is not connected' });
+  try {
+    await sendTelegram(business.telegram.chatId, `Test alert from ${business.name}. You will get orders here.`);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(502).json({ error: 'Could not send the test message.' });
+  }
+});
+
+router.post('/telegram/disconnect', async (req, res) => {
+  const business = await mine(req);
+  if (!business) return res.status(404).json({ error: 'no shop yet' });
+  await Business.updateOne({ _id: business._id }, { $unset: { telegram: 1 } });
   res.json({ ok: true });
 });
 
