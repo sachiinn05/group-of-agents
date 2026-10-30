@@ -28,8 +28,8 @@ export default function Login({ onAuth }) {
   return (
     <div className="auth-wrap">
       <form className="auth-card" onSubmit={submit}>
-        <h1>Groups of Agents</h1>
-        <p>{isLogin ? 'Log in to meet your agents.' : 'Create an account to get your agents.'}</p>
+        <h1>Shop Agent</h1>
+        <p>{isLogin ? 'Log in to manage your shop assistant.' : 'Create an account to get an AI assistant for your shop.'}</p>
         <input
           type="email"
           placeholder="Email"
