@@ -3,7 +3,8 @@ import mongoose from 'mongoose';
 import multer from 'multer';
 import { Agent, Attachment, Message } from './db.js';
 import { requireAuth } from './auth.js';
-import { ask } from './llm.js';
+import { ask, chat } from './llm.js';
+import { TOOLS, runTool } from './emailTool.js';
 import { extractText, isSupported } from './extractText.js';
 
 const router = Router();
@@ -28,6 +29,40 @@ async function buildHistory(messages) {
       .map((f) => `\n\n[Attached file: ${f.filename}]\n${f.text.slice(0, MAX_FILE_TEXT)}`);
     return { role: m.role, content: m.content + parts.join('') };
   });
+}
+
+const MAX_TOOL_ROUNDS = 4;
+
+// Runs the agent. Agents with tools may call them; we run each call and hand the result back.
+export async function runAgent(agent, history, userId) {
+  const tools = agent.tools.map((t) => TOOLS[t]).filter(Boolean);
+  if (tools.length === 0) return { reply: await ask(agent.systemPrompt, history), sent: [] };
+
+  const sent = [];
+  const knownText = history.map((m) => m.content).join('\n');
+  const messages = [...history];
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const msg = await chat(agent.systemPrompt, messages, tools);
+    if (!msg.tool_calls?.length) {
+      // Add a fixed line for each email that really went out, so it shows even if the model forgets.
+      const notes = sent.map(
+        (s) => `\n\n✉️ Sent from ${s.from} to ${s.to}: "${s.subject}"${s.attachments.length ? ` (attached: ${s.attachments.join(', ')})` : ''}`
+      );
+      return { reply: (msg.content || 'Done.') + notes.join(''), sent };
+    }
+    messages.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls });
+    for (const call of msg.tool_calls) {
+      let args = {};
+      try {
+        args = JSON.parse(call.function.arguments || '{}');
+      } catch {
+        // leave args empty; the tool will report what is missing
+      }
+      const content = await runTool(call.function.name, args, { userId, agentId: agent._id, knownText, sent });
+      messages.push({ role: 'tool', tool_call_id: call.id, content });
+    }
+  }
+  return { reply: 'I could not finish that. Please try again.', sent };
 }
 
 // List the logged-in user's agents
@@ -100,9 +135,9 @@ router.post('/:id/chat', upload.array('files', 3), async (req, res) => {
   const recent = await Message.find({ agentId: agent._id }).sort({ _id: -1 }).limit(20);
   const history = await buildHistory(recent.reverse());
   try {
-    const reply = await ask(agent.systemPrompt, history);
+    const { reply, sent } = await runAgent(agent, history, req.userId);
     await Message.create({ agentId: agent._id, role: 'assistant', content: reply });
-    res.json({ agent: agent.name, reply });
+    res.json({ agent: agent.name, reply, sent });
   } catch (e) {
     res.status(502).json({ error: e.message });
   }
