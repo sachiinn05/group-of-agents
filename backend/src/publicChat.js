@@ -3,6 +3,7 @@ import { Business, Lead, PublicMessage } from './db.js';
 import { findKnowledge } from './knowledge.js';
 import { shopPrompt } from './shopPrompt.js';
 import { runToolLoop } from './toolLoop.js';
+import { notifyLead } from './telegram.js';
 
 // Customer-facing routes. No login: anyone with the shop link can chat.
 const router = Router();
@@ -49,8 +50,16 @@ async function saveLead(business, sessionId, args, state) {
   const fields = { name: String(args.name || '').trim(), note: String(args.note || '').trim() };
   // Same customer in the same chat: update instead of creating duplicates.
   const existing = await Lead.findOne({ businessId: business._id, sessionId, phone });
-  if (existing) await Lead.updateOne({ _id: existing._id }, fields);
-  else await Lead.create({ businessId: business._id, sessionId, phone, ...fields });
+  if (existing) {
+    await Lead.updateOne({ _id: existing._id }, fields);
+    // Alert again only if the order details actually changed.
+    if (fields.note !== existing.note) {
+      notifyLead(business, { phone, name: fields.name || existing.name, note: fields.note }, { updated: true });
+    }
+  } else {
+    await Lead.create({ businessId: business._id, sessionId, phone, ...fields });
+    notifyLead(business, { phone, ...fields });
+  }
   state.leadSaved = true;
   return JSON.stringify({ ok: true, message: 'Saved. The owner will contact the customer.' });
 }
