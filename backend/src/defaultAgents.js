@@ -63,8 +63,23 @@ const TEMPLATES = [
   ],
 ];
 
+const CATEGORIES = {
+  Career: ['Resume Reviewer', 'Job Matcher', 'Email Writer', 'Interview Coach'],
+  Developer: ['Coder', 'Debugger', 'Code Reviewer', 'Git Helper'],
+  Learning: ['Tutor', 'Quiz Maker', 'Study Planner'],
+};
+
+const categoryOf = (name) =>
+  Object.keys(CATEGORIES).find((c) => CATEGORIES[c].includes(name)) || 'General';
+
 export function seedAgents(userId) {
   return Agent.insertMany(
-    TEMPLATES.map(([name, role, systemPrompt]) => ({ userId, name, role, systemPrompt }))
+    TEMPLATES.map(([name, role, systemPrompt]) => ({
+      userId,
+      name,
+      role,
+      systemPrompt,
+      category: categoryOf(name),
+    }))
   );
 }

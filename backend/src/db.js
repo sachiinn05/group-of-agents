@@ -16,6 +16,7 @@ export const Agent = model(
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     name: { type: String, required: true },
     role: { type: String, default: '' },
+    category: { type: String, default: 'General' },
     systemPrompt: { type: String, required: true },
   })
 );
