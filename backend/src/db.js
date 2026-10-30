@@ -28,6 +28,11 @@ export const Business = model(
         payments: String,
         policies: String,
       },
+      // Where new-lead alerts go. linkCode is a one-time secret used while connecting.
+      telegram: {
+        chatId: String,
+        linkCode: { type: String, index: true },
+      },
     },
     { timestamps: true }
   )

@@ -4,6 +4,7 @@ import { connectDb } from './db.js';
 import authRoutes from './auth.js';
 import businessRoutes from './business.js';
 import publicChatRoutes from './publicChat.js';
+import { startTelegramPolling } from './telegram.js';
 
 const app = express();
 app.use(cors());
@@ -16,3 +17,4 @@ const port = process.env.PORT || 5000;
 await connectDb();
 console.log('MongoDB connected');
 app.listen(port, () => console.log(`API running on http://localhost:${port}`));
+startTelegramPolling();
