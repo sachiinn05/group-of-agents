@@ -1,0 +1,166 @@
+:root {
+  --bg: #0f1115;
+  --panel: #171a21;
+  --panel-2: #1e222b;
+  --border: #272c37;
+  --text: #e6e8ee;
+  --muted: #8a92a3;
+  --accent: #6c8cff;
+  --accent-dim: #2a3a73;
+  --danger: #ff6b6b;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 15px;
+}
+
+button, input, textarea { font: inherit; color: inherit; }
+
+button { cursor: pointer; }
+
+/* ---------- login ---------- */
+.auth-wrap { height: 100%; display: grid; place-items: center; padding: 16px; }
+
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px;
+  display: grid;
+  gap: 14px;
+}
+
+.auth-card h1 { margin: 0; font-size: 22px; }
+.auth-card p { margin: 0; color: var(--muted); }
+
+.auth-card input {
+  width: 100%;
+  padding: 11px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+}
+
+.auth-card input:focus { border-color: var(--accent); }
+
+.btn {
+  padding: 11px 14px;
+  background: var(--accent);
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.btn:disabled { opacity: 0.6; cursor: default; }
+
+.link-btn { background: none; border: 0; color: var(--accent); padding: 0; }
+
+.error { color: var(--danger); font-size: 14px; }
+
+/* ---------- app layout ---------- */
+.app { height: 100%; display: grid; grid-template-columns: 280px 1fr; }
+
+.sidebar {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sidebar-head {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 700;
+}
+
+.agent-list { flex: 1; overflow-y: auto; padding: 8px; }
+
+.cat-title {
+  padding: 12px 10px 6px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.agent-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  background: none;
+  border: 0;
+  border-radius: 8px;
+}
+
+.agent-item:hover { background: var(--panel-2); }
+.agent-item.active { background: var(--accent-dim); }
+.agent-item small { display: block; color: var(--muted); margin-top: 2px; }
+
+.sidebar-foot { padding: 12px; border-top: 1px solid var(--border); }
+
+.logout {
+  width: 100%;
+  padding: 9px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+}
+
+.logout:hover { color: var(--text); }
+
+/* ---------- chat ---------- */
+.chat { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+
+.chat-head { padding: 14px 20px; border-bottom: 1px solid var(--border); }
+.chat-head h2 { margin: 0; font-size: 17px; }
+.chat-head span { color: var(--muted); font-size: 13px; }
+
+.messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+
+.msg { max-width: 760px; padding: 11px 14px; border-radius: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+.msg.user { align-self: flex-end; background: var(--accent-dim); }
+.msg.assistant { align-self: flex-start; background: var(--panel); border: 1px solid var(--border); }
+.msg > :first-child { margin-top: 0; }
+.msg > :last-child { margin-bottom: 0; }
+.msg pre { background: var(--bg); padding: 12px; border-radius: 8px; overflow-x: auto; }
+.msg code { font-family: ui-monospace, Consolas, monospace; font-size: 13.5px; }
+.msg table { border-collapse: collapse; }
+.msg th, .msg td { border: 1px solid var(--border); padding: 5px 9px; }
+
+.empty { margin: auto; color: var(--muted); text-align: center; }
+
+.typing { color: var(--muted); align-self: flex-start; }
+
+.composer { display: flex; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border); }
+
+.composer textarea {
+  flex: 1;
+  resize: none;
+  max-height: 160px;
+  padding: 11px 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+}
+
+.composer textarea:focus { border-color: var(--accent); }
+
+@media (max-width: 720px) {
+  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .sidebar { max-height: 38vh; border-right: 0; border-bottom: 1px solid var(--border); }
+}
