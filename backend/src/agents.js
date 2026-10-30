@@ -12,8 +12,16 @@ const getAgent = (id, userId) =>
 
 // List the logged-in user's agents
 router.get('/', async (req, res) => {
-  const agents = await Agent.find({ userId: req.userId }, 'name role');
-  res.json(agents.map((a) => ({ id: a.id, name: a.name, role: a.role })));
+  const agents = await Agent.find({ userId: req.userId }, 'name role category');
+  res.json(agents.map((a) => ({ id: a.id, name: a.name, role: a.role, category: a.category })));
+});
+
+// Saved chat history for one agent
+router.get('/:id/messages', async (req, res) => {
+  const agent = await getAgent(req.params.id, req.userId);
+  if (!agent) return res.status(404).json({ error: 'agent not found' });
+  const messages = await Message.find({ agentId: agent._id }).sort({ _id: 1 }).limit(100);
+  res.json(messages.map((m) => ({ role: m.role, content: m.content })));
 });
 
 // Create a custom agent
