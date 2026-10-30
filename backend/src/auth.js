@@ -2,7 +2,6 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { User } from './db.js';
-import { seedAgents } from './defaultAgents.js';
 
 const router = Router();
 const sign = (id) => jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -14,7 +13,6 @@ router.post('/signup', async (req, res) => {
     return res.status(409).json({ error: 'email already registered' });
   }
   const user = await User.create({ email, password: bcrypt.hashSync(password, 10) });
-  await seedAgents(user._id);
   res.status(201).json({ token: sign(user.id) });
 });
 
