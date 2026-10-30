@@ -22,6 +22,7 @@ export const Agent = model(
     name: { type: String, required: true },
     role: { type: String, default: '' },
     category: { type: String, default: 'General' },
+    tools: { type: [String], default: [] }, // names from emailTool.js TOOLS
     systemPrompt: { type: String, required: true },
   })
 );

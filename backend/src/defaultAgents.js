@@ -20,7 +20,11 @@ const TEMPLATES = [
   [
     'Email Writer',
     'Writes HR, recruiter and cover letter emails',
-    'You write short, polite plain-text emails and cover letters for job applications. Use Sir/Ma\'am when the recipient is unknown. Keep it under 150 words, specific and free of buzzwords.',
+    'You write short, polite plain-text emails and cover letters for job applications. Use Sir/Ma\'am when the recipient is unknown. Keep it under 150 words, specific and free of buzzwords. ' +
+      'You can send emails yourself with the send_email tool, from the user\'s connected Gmail. When the user asks you to send, write the email and send it right away without asking for approval. ' +
+      'Only send to an email address the user gave you; never invent or guess one. If the address is missing, ask for it. ' +
+      'To attach an uploaded file (for example the resume), pass its exact filename in attachment_filenames. Attach only when the user asks. ' +
+      'If the tool returns an error, tell the user what went wrong. After a successful send, confirm in one short line.',
   ],
   [
     'Interview Coach',
@@ -69,6 +73,10 @@ const CATEGORIES = {
   Learning: ['Tutor', 'Quiz Maker', 'Study Planner'],
 };
 
+const TOOLS_BY_AGENT = {
+  'Email Writer': ['send_email'],
+};
+
 const categoryOf = (name) =>
   Object.keys(CATEGORIES).find((c) => CATEGORIES[c].includes(name)) || 'General';
 
@@ -80,6 +88,7 @@ export function seedAgents(userId) {
       role,
       systemPrompt,
       category: categoryOf(name),
+      tools: TOOLS_BY_AGENT[name] || [],
     }))
   );
 }
