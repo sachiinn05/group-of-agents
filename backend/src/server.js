@@ -4,6 +4,8 @@ import { connectDb } from './db.js';
 import authRoutes from './auth.js';
 import agentRoutes from './agents.js';
 import googleRoutes from './google.js';
+import businessRoutes from './business.js';
+import publicChatRoutes from './publicChat.js';
 
 const app = express();
 app.use(cors());
@@ -11,6 +13,8 @@ app.use(express.json());
 app.use('/auth', authRoutes);
 app.use('/agents', agentRoutes);
 app.use('/google', googleRoutes);
+app.use('/business', businessRoutes);
+app.use('/shop', publicChatRoutes);
 
 const port = process.env.PORT || 5000;
 await connectDb();
