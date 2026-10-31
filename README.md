@@ -44,7 +44,32 @@ a "do not email" switch per contact, only Gmail's send permission (it cannot rea
 every email. It starts in **test mode**: emails are written and listed under Sent emails but not sent. Switch to
 **Live** in Settings once Gmail is connected.
 
-### Connect Gmail
+### It reads your inbox too
+
+With an App Password connection the agent also **reads your replies** (Gmail over IMAP) and acts like a real assistant:
+
+- A contact writes back, so "no reply after N days" follow-ups stop for them.
+- It reads what they said and updates their status (rejected, interview...), or marks them do-not-email if they ask to stop.
+- It answers in the same email thread. In **Auto** mode it sends only safe replies (a thank-you after a rejection, a simple
+  question). Anything about times, money or decisions becomes a **draft** you edit and approve in the Inbox tab.
+  **Draft** mode never sends a reply by itself. **Off** ignores the inbox.
+- It only handles mail from your contacts (or answers to emails it sent), only mail newer than 3 days, and ignores
+  newsletters, auto-replies and no-reply senders. Mail from before you connected is never touched.
+- The **Activity** tab shows everything it does, live. Every sent email lists *why* it was written.
+
+The email text is treated as untrusted data (never as instructions), replies only go to the sender, and it starts in test mode.
+
+### Connect your email (App Password, recommended)
+
+1. Turn on **2-Step Verification** for your Google account.
+2. Open https://myaccount.google.com/apppasswords, create an App Password called "Email Agent", copy the 16 letters.
+3. Email Agent > Settings > paste your Gmail address and the App Password > **Connect**. Then switch to **Live**.
+
+No Google Cloud project is needed. The password is stored encrypted (AES-256-GCM). Set `SECRET_KEY` in `backend/.env`
+in production; if you change it, people must reconnect. Mail servers are Gmail's by default and can be changed with
+`MAIL_SMTP_HOST`, `MAIL_SMTP_PORT`, `MAIL_IMAP_HOST`, `MAIL_IMAP_PORT`.
+
+### Connect Gmail with Google sign-in (optional, can only send)
 
 1. Go to https://console.cloud.google.com, create a project, and enable the **Gmail API**.
 2. **OAuth consent screen:** External, add your app name, and add your Gmail address under **Test users**.
