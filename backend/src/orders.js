@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
-import { Order, Product, ORDER_STATUSES } from './db.js';
+import { Order, Product, PublicMessage, ORDER_STATUSES } from './db.js';
 import { requireAuth } from './auth.js';
 import { loadShop } from './ownerShop.js';
 import { shortId } from './shopTools.js';
@@ -22,6 +22,14 @@ const view = (o) => ({
   feedback: o.feedback?.rating ? { rating: o.feedback.rating, comment: o.feedback.comment } : null,
   createdAt: o.createdAt,
 });
+
+// What the customer is told in their chat when the owner changes an order's status.
+const STATUS_MESSAGES = {
+  accepted: (n) => `✅ Good news! Your order #${n} was accepted by the shop.`,
+  out_for_delivery: (n) => `🚚 Your order #${n} is out for delivery.`,
+  delivered: (n) => `📦 Your order #${n} was delivered. Please rate it in the Orders tab.`,
+  cancelled: (n) => `❌ Sorry, your order #${n} was cancelled by the shop. Please contact the shop for details.`,
+};
 
 router.get('/', async (req, res) => {
   const orders = await Order.find({ businessId: req.business._id }).sort({ _id: -1 }).limit(100);
@@ -53,8 +61,13 @@ router.patch('/:id', async (req, res) => {
     await adjustStock(order, +1);
     order.stockDeducted = false;
   }
+  const changed = order.status !== status;
   order.status = status;
   await order.save();
+
+  // Tell the customer in their chat, so they see it without opening the Orders tab.
+  const text = changed && STATUS_MESSAGES[status]?.(shortId(order));
+  if (text) await PublicMessage.create({ businessId: order.businessId, sessionId: order.sessionId, role: 'assistant', content: text });
   res.json(view(order));
 });
 
