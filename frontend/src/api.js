@@ -61,6 +61,9 @@ export const setLeadStatus = (id, status) => request(`/business/leads/${id}`, { 
 // ---- customer (no login) ----
 export const getShop = (slug) => request(`/public/${slug}`);
 export const getShopHistory = (slug, sessionId) => request(`/public/${slug}/history?sessionId=${sessionId}`);
+export const getShopMenu = (slug) => request(`/public/${slug}/products`);
+export const placeCartOrder = (slug, sessionId, order) =>
+  request(`/public/${slug}/orders`, { body: { sessionId, ...order } });
 export const getShopOrders = (slug, sessionId) => request(`/public/${slug}/orders?sessionId=${sessionId}`);
 export const rateOrder = (slug, sessionId, orderId, rating, comment) =>
   request(`/public/${slug}/orders/${orderId}/feedback`, { body: { sessionId, rating, comment } });
