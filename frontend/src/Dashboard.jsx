@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import ShopSetup from './ShopSetup.jsx';
 import Leads from './Leads.jsx';
+import Products from './Products.jsx';
+import Orders from './Orders.jsx';
 import { getBusiness } from './api.js';
 
 export default function Dashboard({ onLogout }) {
@@ -27,11 +29,16 @@ export default function Dashboard({ onLogout }) {
       {business && (
         <nav className="tabs">
           <button className={tab === 'shop' ? 'on' : ''} onClick={() => setTab('shop')}>My shop</button>
-          <button className={tab === 'leads' ? 'on' : ''} onClick={() => setTab('leads')}>Customer leads</button>
+          <button className={tab === 'products' ? 'on' : ''} onClick={() => setTab('products')}>Products</button>
+          <button className={tab === 'orders' ? 'on' : ''} onClick={() => setTab('orders')}>Orders</button>
+          <button className={tab === 'leads' ? 'on' : ''} onClick={() => setTab('leads')}>Leads</button>
         </nav>
       )}
       <main className="dash-body">
-        {tab === 'leads' && business ? <Leads /> : <ShopSetup key={business?.id || 'new'} business={business} onChanged={load} />}
+        {business && tab === 'products' ? <Products />
+          : business && tab === 'orders' ? <Orders />
+          : business && tab === 'leads' ? <Leads />
+          : <ShopSetup key={business?.id || 'new'} business={business} onChanged={load} />}
       </main>
     </div>
   );
