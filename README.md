@@ -16,6 +16,24 @@ Open **Customer leads** to see who wants an order and call them back.
 the uploaded documents, replies in English, Hindi or Hinglish, never invents prices, and refuses
 off-topic requests. If it does not know, it says the owner will check and takes the customer's number.
 
+## Works for any kind of shop
+
+One agent engine serves every business. The owner picks a **type**, and that only changes the wording,
+the extra rules the agent follows, and how customers can receive an order (`backend/src/profiles.js`).
+
+| Type | Receive by | Extra behaviour |
+|---|---|---|
+| General store / Grocery | Delivery, Pickup | |
+| Restaurant / Cafe / Bakery / Sweets | Delivery, Pickup, Dine-in | Passes on notes (veg, spicy); asks table number for dine-in |
+| Pharmacy / Medical store | Delivery, Pickup | Never gives medical advice; warns when an item needs a prescription |
+| Clothing / Fashion | Delivery, Pickup | Asks size and colour |
+| Electronics / Appliances | Delivery, Pickup | Mentions warranty only if written |
+| Salon / Spa / Services | Book appointment | Ordering means booking: asks date and time |
+| Other (any label, like "Pet shop") | Delivery, Pickup | Generic |
+
+The owner can change how orders are received per shop. Items can have a **category** (groups the menu) and a
+**note** (veg, size M, prescription required). To add a type, add one entry in `profiles.js`.
+
 ## Run locally
 
 ```
