@@ -311,6 +311,7 @@ export const AgentEvent = model(
   'AgentEvent',
   new Schema({
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    agent: { type: String, default: 'email' }, // which agent did it: email or khata
     kind: { type: String, default: 'info' }, // info, write, send, read, decide, warn, error
     text: { type: String, required: true },
     createdAt: { type: Date, default: Date.now, expires: 60 * 60 * 24 * 7 },
@@ -328,6 +329,86 @@ export const EmailChatMessage = model(
     },
     { timestamps: true }
   )
+);
+
+// ---------------------------------------------------------------------------------------------
+// Payment Reminder (Khata) Agent: who owes the user money, and polite reminders until it is paid.
+// ---------------------------------------------------------------------------------------------
+
+export const REMINDER_TONES = ['gentle', 'firm', 'final'];
+export const DEFAULT_STEPS = [
+  { days: 1, tone: 'gentle' }, // one day after the due date
+  { days: 7, tone: 'firm' },
+  { days: 15, tone: 'final' },
+];
+
+export const KhataSettings = model(
+  'KhataSettings',
+  new Schema({
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
+    mode: { type: String, enum: ['dryrun', 'live'], default: 'dryrun' }, // dryrun = write but do not send
+    paused: { type: Boolean, default: false },
+    dailyLimit: { type: Number, default: 30, min: 1, max: 400 },
+    businessName: { type: String, default: '' }, // who the reminders come from: "Sharma General Store"
+    senderName: { type: String, default: '' },
+    signature: { type: String, default: '' },
+    upiId: { type: String, default: '' }, // shown in reminders so customers can pay at once
+    language: { type: String, enum: ['en', 'hi'], default: 'en' },
+    useAI: { type: Boolean, default: true }, // false = always use the plain templates
+    // When to remind, in days after the due date (negative = before it), and how firm to be.
+    steps: { type: [{ days: Number, tone: { type: String, enum: REMINDER_TONES }, _id: false }], default: () => DEFAULT_STEPS.map((s) => ({ ...s })) },
+    sendFrom: { type: Number, default: 9, min: 0, max: 23 }, // only send between these hours (server time),
+    sendTo: { type: Number, default: 20, min: 1, max: 24 }, // so nobody gets a reminder at 3 am
+    countryCode: { type: String, default: '91' }, // for WhatsApp links to 10-digit numbers
+  })
+);
+
+// Money someone owes the user.
+export const Due = model(
+  'Due',
+  new Schema(
+    {
+      userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+      name: { type: String, required: true },
+      email: { type: String, default: '' }, // lower case. Without it the agent prepares a WhatsApp message instead
+      phone: { type: String, default: '' }, // digits only
+      amount: { type: Number, required: true, min: 0.01 }, // the full amount owed
+      payments: [{ amount: Number, at: { type: Date, default: Date.now }, note: String, _id: false }],
+      dueDate: { type: Date, required: true },
+      note: { type: String, default: '' }, // what it is for: "Groceries for October"
+      status: { type: String, enum: ['unpaid', 'paid', 'cancelled'], default: 'unpaid', index: true },
+      paidAt: Date,
+      optedOut: { type: Boolean, default: false }, // never remind this person automatically
+      pausedUntil: Date, // "they promised to pay on Friday"
+      repliedAt: Date, // they wrote back (found in the inbox)
+      replyText: String,
+      remindersSent: { type: Number, default: 0 },
+      lastReminderAt: Date,
+    },
+    { timestamps: true }
+  )
+);
+
+// Every reminder the agent wrote. The unique key means a step is never sent twice for the same due.
+export const ReminderLog = model(
+  'ReminderLog',
+  new Schema(
+    {
+      userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+      dueId: { type: Schema.Types.ObjectId, ref: 'Due', required: true },
+      step: { type: Number, required: true }, // position in the user's steps
+      dry: { type: Boolean, default: false }, // a test-mode preview, which must not use up the real step
+      to: { type: String, default: '' },
+      subject: String,
+      body: String,
+      tone: String,
+      outcome: { type: String, enum: ['sending', 'sent', 'dry_run', 'failed', 'skipped'], required: true },
+      error: String,
+      reason: String,
+      messageId: String,
+    },
+    { timestamps: true }
+  ).index({ dueId: 1, step: 1, dry: 1 }, { unique: true })
 );
 
 export const connectDb = () => mongoose.connect(process.env.MONGO_URI);

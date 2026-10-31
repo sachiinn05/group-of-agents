@@ -246,7 +246,7 @@ router.post('/inbox/:id/dismiss', async (req, res) => {
 
 // ---- what the agent has been doing (also pushed live over the socket) ----
 router.get('/activity', async (req, res) => {
-  const events = await AgentEvent.find({ userId: req.userId }).sort({ _id: -1 }).limit(80);
+  const events = await AgentEvent.find({ userId: req.userId, agent: { $ne: 'khata' } }).sort({ _id: -1 }).limit(80);
   res.json(events.map((e) => ({ id: e.id, kind: e.kind, text: e.text, at: e.createdAt })));
 });
 
