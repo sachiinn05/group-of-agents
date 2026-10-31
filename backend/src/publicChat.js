@@ -4,7 +4,7 @@ import { Business, Order, Product, PublicMessage } from './db.js';
 import { findKnowledge } from './knowledge.js';
 import { shopPrompt } from './shopPrompt.js';
 import { runToolLoop } from './toolLoop.js';
-import { TOOLS, executeTool, placeOrder, isAvailable, shortId, upiLink } from './shopTools.js';
+import { TOOLS, executeTool, placeOrder, isAvailable, customerOrder } from './shopTools.js';
 
 // Customer-facing routes. No login: anyone with the shop link can chat.
 const router = Router();
@@ -33,19 +33,6 @@ async function describeCart(business, cart) {
   const lines = products.map((p) => `${Number(cart[p.id])} x ${p.name}${p.unit ? ` (${p.unit})` : ''} [product_id ${p.id}]`);
   return lines.join('\n') || '(empty)';
 }
-
-// What a customer may see about their own order.
-const customerOrder = (business, o) => ({
-  id: o.id,
-  number: shortId(o),
-  status: o.status,
-  total: o.total,
-  fulfilment: o.fulfilment,
-  items: o.items.map((i) => ({ name: i.name, unit: i.unit, qty: i.qty })),
-  payUrl: ['pending', 'accepted', 'out_for_delivery'].includes(o.status) ? upiLink(business, o) : null,
-  feedback: o.feedback?.rating ? { rating: o.feedback.rating, comment: o.feedback.comment } : null,
-  createdAt: o.createdAt,
-});
 
 // Public details for the chat page header
 router.get('/:slug', async (req, res) => {

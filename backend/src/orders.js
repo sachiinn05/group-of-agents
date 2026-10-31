@@ -3,7 +3,8 @@ import mongoose from 'mongoose';
 import { Order, Product, PublicMessage, ORDER_STATUSES } from './db.js';
 import { requireAuth } from './auth.js';
 import { loadShop } from './ownerShop.js';
-import { shortId } from './shopTools.js';
+import { shortId, customerOrder } from './shopTools.js';
+import { emitToCustomer } from './realtime.js';
 
 const router = Router();
 router.use(requireAuth, loadShop);
@@ -68,6 +69,12 @@ router.patch('/:id', async (req, res) => {
   // Tell the customer in their chat, so they see it without opening the Orders tab.
   const text = changed && STATUS_MESSAGES[status]?.(shortId(order));
   if (text) await PublicMessage.create({ businessId: order.businessId, sessionId: order.sessionId, role: 'assistant', content: text });
+
+  // Push it live to the customer's open page, so they do not have to refresh.
+  if (changed) {
+    emitToCustomer(order.businessId, order.sessionId, 'order:update', customerOrder(req.business, order));
+    if (text) emitToCustomer(order.businessId, order.sessionId, 'chat:message', { role: 'assistant', content: text });
+  }
   res.json(view(order));
 });
 

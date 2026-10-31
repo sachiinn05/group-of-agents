@@ -18,6 +18,19 @@ export function upiLink(business, order) {
   return `upi://pay?${params}`;
 }
 
+// What a customer may see about their own order (also what is pushed to them live).
+export const customerOrder = (business, o) => ({
+  id: o.id,
+  number: shortId(o),
+  status: o.status,
+  total: o.total,
+  fulfilment: o.fulfilment,
+  items: o.items.map((i) => ({ name: i.name, unit: i.unit, qty: i.qty })),
+  payUrl: ['pending', 'accepted', 'out_for_delivery'].includes(o.status) ? upiLink(business, o) : null,
+  feedback: o.feedback?.rating ? { rating: o.feedback.rating, comment: o.feedback.comment } : null,
+  createdAt: o.createdAt,
+});
+
 const available = (p) => p.inStock && (p.stockQty === null || p.stockQty > 0);
 
 const validPhone = (raw) => {
