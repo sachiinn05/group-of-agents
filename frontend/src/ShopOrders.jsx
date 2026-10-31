@@ -51,6 +51,7 @@ export default function ShopOrders({ slug, sessionId, orders, onChanged }) {
             <strong>{rupees(o.total)}</strong>
           </div>
           <div className="muted">{o.items.map((i) => `${i.qty} × ${i.name}`).join(', ')}</div>
+          {o.fulfilment !== 'delivery' && o.schedule && <div className="muted">{o.fulfilment === 'appointment' ? 'Appointment' : o.fulfilment === 'dinein' ? 'Dine-in' : 'Pickup'}: {o.schedule}</div>}
           {o.payUrl && <a className="btn small" href={o.payUrl}>Pay {rupees(o.total)} with UPI</a>}
           {o.payUrl && <div className="muted small">Opens your UPI app on your phone.</div>}
           {o.status === 'delivered' && !o.feedback && <Rate slug={slug} sessionId={sessionId} order={o} onDone={onChanged} />}

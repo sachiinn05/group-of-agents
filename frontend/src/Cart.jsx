@@ -14,10 +14,12 @@ const loadSaved = () => {
 // The cart and checkout form. The shop recalculates the total, so this one is for display.
 export default function Cart({ slug, sessionId, menu, lines, total, setQty, onPlaced, onBrowse }) {
   const saved = loadSaved();
-  const [fulfilment, setFulfilment] = useState('delivery');
+  const modes = menu?.modes?.length ? menu.modes : [{ key: 'delivery', label: 'Delivery' }, { key: 'pickup', label: 'Pickup' }];
+  const [fulfilment, setFulfilment] = useState(modes[0].key);
   const [name, setName] = useState(saved.name || '');
   const [phone, setPhone] = useState(saved.phone || '');
   const [address, setAddress] = useState(saved.address || '');
+  const [schedule, setSchedule] = useState('');
   const [note, setNote] = useState('');
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState('');
@@ -26,10 +28,13 @@ export default function Cart({ slug, sessionId, menu, lines, total, setQty, onPl
     return (
       <div className="menu-panel">
         <p className="muted">Your cart is empty.</p>
-        <button className="btn" onClick={onBrowse}>Browse menu</button>
+        <button className="btn" onClick={onBrowse}>Browse {(menu?.menuLabel || 'menu').toLowerCase()}</button>
       </div>
     );
   }
+
+  const booking = fulfilment === 'appointment';
+  const scheduleHint = { dinein: 'Table number or arrival time', appointment: 'Preferred date and time (e.g. Saturday 4 pm)', pickup: 'Pickup time (optional)' }[fulfilment];
 
   async function place(e) {
     e.preventDefault();
@@ -42,6 +47,7 @@ export default function Cart({ slug, sessionId, menu, lines, total, setQty, onPl
         name,
         phone,
         address,
+        schedule,
         note,
       });
       localStorage.setItem(SAVED_KEY, JSON.stringify({ name, phone, address }));
@@ -68,10 +74,13 @@ export default function Cart({ slug, sessionId, menu, lines, total, setQty, onPl
       ))}
       <div className="order-total"><span>Total</span><strong>{rupees(total)}</strong></div>
 
-      <div className="seg">
-        <button type="button" className={fulfilment === 'delivery' ? 'on' : ''} onClick={() => setFulfilment('delivery')}>Delivery</button>
-        <button type="button" className={fulfilment === 'pickup' ? 'on' : ''} onClick={() => setFulfilment('pickup')}>Pickup</button>
-      </div>
+      {modes.length > 1 && (
+        <div className="seg">
+          {modes.map((m) => (
+            <button key={m.key} type="button" className={fulfilment === m.key ? 'on' : ''} onClick={() => setFulfilment(m.key)}>{m.label}</button>
+          ))}
+        </div>
+      )}
 
       <div className="checkout">
         <input placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} required />
@@ -82,11 +91,16 @@ export default function Cart({ slug, sessionId, menu, lines, total, setQty, onPl
             {menu?.deliveryAreas?.length > 0 && <span className="muted small">We deliver to: {menu.deliveryAreas.join(', ')}</span>}
           </>
         )}
-        <input placeholder="Note for the shop (optional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} />
+        {scheduleHint && (
+          <input placeholder={scheduleHint} value={schedule} onChange={(e) => setSchedule(e.target.value)} maxLength={100} required={fulfilment !== 'pickup'} />
+        )}
+        <input placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} />
       </div>
 
       {error && <div className="error">{error}</div>}
-      <button className="btn" disabled={placing}>{placing ? 'Placing order...' : `Place order · ${rupees(total)}`}</button>
+      <button className="btn" disabled={placing}>
+        {placing ? 'Please wait...' : `${booking ? 'Book appointment' : 'Place order'} · ${rupees(total)}`}
+      </button>
       <span className="muted small">The shop confirms the final amount.{menu?.upi ? ' You can pay by UPI after ordering.' : ''}</span>
     </form>
   );

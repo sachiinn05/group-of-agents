@@ -176,7 +176,7 @@ export default function ShopChat({ slug }) {
         <button className={view === 'chat' ? 'on' : ''} onClick={() => { setView('chat'); setUnread(0); }}>
           Chat{unread > 0 && <span className="badge">{unread}</span>}
         </button>
-        <button className={view === 'menu' ? 'on' : ''} onClick={() => setView('menu')}>Menu</button>
+        <button className={view === 'menu' ? 'on' : ''} onClick={() => setView('menu')}>{menu?.menuLabel || 'Menu'}</button>
         <button className={view === 'cart' ? 'on' : ''} onClick={() => setView('cart')}>Cart{count ? ` (${count})` : ''}</button>
         <button className={view === 'orders' ? 'on' : ''} onClick={() => setView('orders')}>Orders{orders.length ? ` (${orders.length})` : ''}</button>
       </nav>
@@ -192,7 +192,7 @@ export default function ShopChat({ slug }) {
         <>
           <div className="messages">
             <div className="msg assistant">
-              Hi! Welcome to {shop.name}. Ask me anything, or tap <b>Menu</b> to browse items and add them to your cart.
+              Hi! Welcome to {shop.name}. Ask me anything, or open <b>{menu?.menuLabel || 'Menu'}</b> to browse and add to your cart.
             </div>
             {messages.map((m, i) => (
               <div key={i} className={`msg ${m.role}`}>
