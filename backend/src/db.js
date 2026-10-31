@@ -79,11 +79,52 @@ export const PublicMessage = model(
     {
       businessId: { type: Schema.Types.ObjectId, ref: 'Business', required: true, index: true },
       sessionId: { type: String, required: true, index: true },
-      role: { type: String, enum: ['user', 'assistant'], required: true },
+      role: { type: String, enum: ['user', 'assistant', 'owner'], required: true }, // owner = the shop owner replied
       content: { type: String, required: true },
     },
     { timestamps: true }
   )
+);
+
+// A running offer or announcement ("10% off on rice today"). The agent and the customer page share it until it expires.
+export const Offer = model(
+  'Offer',
+  new Schema(
+    {
+      businessId: { type: Schema.Types.ObjectId, ref: 'Business', required: true, index: true },
+      text: { type: String, required: true },
+      expiresAt: Date, // empty = until the owner removes it
+    },
+    { timestamps: true }
+  )
+);
+
+// Something customers asked that the agent could not answer. Counted, so the owner sees what to add.
+export const Unanswered = model(
+  'Unanswered',
+  new Schema(
+    {
+      businessId: { type: Schema.Types.ObjectId, ref: 'Business', required: true, index: true },
+      key: { type: String, required: true }, // the question in lower case, to count repeats
+      question: { type: String, required: true },
+      count: { type: Number, default: 1 },
+      lastAskedAt: { type: Date, default: Date.now },
+      handled: { type: Boolean, default: false },
+    },
+    { timestamps: true }
+  )
+);
+
+// Remembers which customer a Telegram alert was about, so the owner can answer by replying to it.
+export const TelegramThread = model(
+  'TelegramThread',
+  new Schema({
+    businessId: { type: Schema.Types.ObjectId, ref: 'Business', required: true },
+    chatId: { type: String, required: true },
+    messageId: { type: Number, required: true },
+    sessionId: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now, expires: 60 * 60 * 24 * 30 }, // forgotten after 30 days
+  })
 );
 
 // What the shop sells. The agent looks prices and stock up here, so it never guesses.
@@ -118,6 +159,7 @@ export const Order = model(
       fulfilment: { type: String, enum: ['delivery', 'pickup', 'dinein', 'appointment'], default: 'delivery' },
       address: String,
       schedule: String, // table or arrival time (dine-in), pickup time, or the booking date and time
+      lang: { type: String, enum: ['en', 'hi'], default: 'en' }, // language the customer chose, for messages we send them
       note: String,
       items: [
         {
