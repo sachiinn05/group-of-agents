@@ -16,6 +16,47 @@ Open **Customer leads** to see who wants an order and call them back.
 the uploaded documents, replies in English, Hindi or Hinglish, never invents prices, and refuses
 off-topic requests. If it does not know, it says the owner will check and takes the customer's number.
 
+## Agents
+
+After logging in, the user lands on a home screen and picks an agent. To add an agent: one card in
+`frontend/src/Home.jsx`, one case in `frontend/src/App.jsx`, and its own routes in the backend.
+
+| Agent | What it does |
+|---|---|
+| **Shop Agent** | Customer-facing assistant for a shop, restaurant, pharmacy, salon... (see below) |
+| **Email Agent** | Sends emails by itself, depending on the situation (see below) |
+
+## Email Agent
+
+The Email Agent sends emails by itself when a **situation** becomes true for a **contact**.
+
+1. **Contacts:** people the agent may email. Each has a status (`applied`, `interview`, `customer`...) and notes.
+2. **Situations:** a rule with a trigger and what the email should say:
+   - *a contact is added* (welcome email)
+   - *a status changes to X* (the moment it happens)
+   - *a contact stays in status X for N days* (follow-up after 5 days with no change)
+3. The agent checks every minute, has the AI write each email from the contact's details and your instructions,
+   adds your signature, and sends it from your Gmail. You can also talk to it: "send a thank-you to
+   rahul@acme.com", or "if someone stays in applied for 7 days, follow up".
+
+Safeguards: one email per situation per person (even if two checks overlap), a daily limit, a pause switch,
+a "do not email" switch per contact, only Gmail's send permission (it cannot read your inbox), and a log of
+every email. It starts in **test mode**: emails are written and listed under Sent emails but not sent. Switch to
+**Live** in Settings once Gmail is connected.
+
+### Connect Gmail
+
+1. Go to https://console.cloud.google.com, create a project, and enable the **Gmail API**.
+2. **OAuth consent screen:** External, add your app name, and add your Gmail address under **Test users**.
+3. **Credentials > Create credentials > OAuth client ID** (Web application). Authorized redirect URI:
+   `http://localhost:5000/google/callback`
+4. Put the client ID and secret in `backend/.env` (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`) and set
+   `FRONTEND_URL` to the address of the app. Restart the backend.
+5. Email Agent > Settings > **Connect Gmail**, then **Live**.
+
+While the Google app is in "Testing", only the listed test users can connect, and the connection expires after 7 days.
+The scheduler runs inside the backend process, so the backend has to be running for time-based situations to fire.
+
 ## Works for any kind of shop
 
 One agent engine serves every business. The owner picks a **type**, and that only changes the wording,
