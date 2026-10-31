@@ -30,8 +30,9 @@ export default function SentLog() {
               <strong>{l.subject || '(no subject)'}</strong>
             </div>
             <span className="muted small">
-              To {l.to} · {l.rule ? `situation: ${l.rule}` : 'from chat'} · {new Date(l.at).toLocaleString()}
+              To {l.to} · {l.rule ? `situation: ${l.rule}` : l.source === 'inbox' ? 'reply to an email' : 'from chat'} · {new Date(l.at).toLocaleString()}
             </span>
+            {l.reason && <span className="muted small">Why: {l.reason}</span>}
           </button>
           {l.error && <div className="error">{l.error}</div>}
           {l.outcome === 'failed' && (

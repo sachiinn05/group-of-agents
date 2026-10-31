@@ -28,7 +28,9 @@ function Row({ contact, statuses, onChange, onRemove, onError }) {
         <input className="status" list="statuses" value={status} onChange={(e) => setStatus(e.target.value)}
           onBlur={() => status.trim().toLowerCase() !== contact.status && save({ status })} />
       </label>
-      <span className="muted small">{daysSince(contact.statusAt)}d</span>
+      <span className="muted small">
+        {daysSince(contact.statusAt)}d{contact.lastRepliedAt ? ` · replied ${daysSince(contact.lastRepliedAt)}d ago` : ''}
+      </span>
       <button className={`pill ${contact.optedOut ? 'on' : ''}`} onClick={() => save({ optedOut: !contact.optedOut })} title="Never email this person automatically">
         {contact.optedOut ? 'Do not email' : 'Emailing on'}
       </button>
