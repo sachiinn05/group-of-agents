@@ -28,6 +28,8 @@ function cleanProduct(body, partial = false) {
     if (price === null) return { error: 'price must be a number' };
     fields.price = price;
   }
+  if (body.category !== undefined) fields.category = String(body.category || '').trim().slice(0, 40);
+  if (body.note !== undefined) fields.note = String(body.note || '').trim().slice(0, 120);
   if (body.inStock !== undefined) fields.inStock = !!body.inStock;
   if (body.stockQty !== undefined) {
     if (body.stockQty === null || body.stockQty === '') fields.stockQty = null;
@@ -40,7 +42,16 @@ function cleanProduct(body, partial = false) {
   return { fields };
 }
 
-const view = (p) => ({ id: p.id, name: p.name, unit: p.unit, price: p.price, inStock: p.inStock, stockQty: p.stockQty });
+const view = (p) => ({
+  id: p.id,
+  name: p.name,
+  unit: p.unit,
+  price: p.price,
+  category: p.category,
+  note: p.note,
+  inStock: p.inStock,
+  stockQty: p.stockQty,
+});
 
 router.get('/', async (req, res) => {
   const products = await Product.find({ businessId: req.business._id }).sort({ name: 1 });
@@ -57,19 +68,27 @@ router.post('/', async (req, res) => {
   res.status(201).json(view(product));
 });
 
-// Paste many lines at once: "Basmati Rice | 1 kg | 140" (unit is optional: "Sugar | 46")
+// Paste many lines at once: "Name | unit | price | category | note", or just "Name | price"
+// Example: "Paneer Tikka | 1 plate | 220 | Starters | Veg"
 router.post('/bulk', async (req, res) => {
   const lines = String(req.body.text || '').split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 300);
   const docs = [];
   const skipped = [];
   for (const line of lines) {
     const parts = (line.includes('|') ? line.split('|') : line.includes('\t') ? line.split('\t') : line.split(',')).map((s) => s.trim());
-    const price = toPrice(parts.at(-1));
+    const price = toPrice(parts.length === 2 ? parts[1] : parts[2]);
     if (parts.length < 2 || price === null || !parts[0]) {
       skipped.push(line);
       continue;
     }
-    docs.push({ businessId: req.business._id, name: parts[0].slice(0, 120), unit: parts.length > 2 ? parts[1].slice(0, 40) : '', price });
+    docs.push({
+      businessId: req.business._id,
+      name: parts[0].slice(0, 120),
+      unit: parts.length > 2 ? (parts[1] || '').slice(0, 40) : '',
+      price,
+      category: (parts[3] || '').slice(0, 40),
+      note: (parts[4] || '').slice(0, 120),
+    });
   }
   if (docs.length) await Product.insertMany(docs);
   res.status(201).json({ added: docs.length, skipped });
