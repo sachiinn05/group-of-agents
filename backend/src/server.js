@@ -11,7 +11,7 @@ import offerRoutes from './offers.js';
 import chatRoutes from './chats.js';
 import emailRoutes from './emailRoutes.js';
 import googleRoutes from './google.js';
-import { startEmailScheduler } from './emailEngine.js';
+import { startEmailScheduler } from './emailScheduler.js';
 import { startTelegramPolling } from './telegram.js';
 import { initRealtime } from './realtime.js';
 

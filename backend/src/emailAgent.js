@@ -1,4 +1,5 @@
-import { Contact, Rule, EmailChatMessage, EmailLog, User, TRIGGERS } from './db.js';
+import { Contact, Rule, EmailChatMessage, EmailLog, TRIGGERS } from './db.js';
+import { getConnection } from './mail.js';
 import { runToolLoop } from './toolLoop.js';
 import { getSettings, isEmail, validateRule, blockReason, deliver, fireContactEvent } from './emailEngine.js';
 
@@ -70,12 +71,12 @@ const describeTrigger = ({ type, status, days }) =>
   type === 'contact_added' ? 'when a contact is added' : type === 'status_changed' ? `when status becomes "${status}"` : `${days} days after status "${status}"`;
 
 async function buildPrompt(userId, settings) {
-  const [user, rules, contacts] = await Promise.all([
-    User.findById(userId, 'google'),
+  const [conn, rules, contacts] = await Promise.all([
+    getConnection(userId),
     Rule.find({ userId }).sort({ _id: -1 }).limit(20),
     Contact.find({ userId }).sort({ updatedAt: -1 }).limit(40),
   ]);
-  const gmail = user?.google?.email ? `connected (${user.google.email})` : 'NOT connected';
+  const gmail = conn?.email ? `connected (${conn.email})` : 'NOT connected';
   const state = [
     `Sending mode: ${settings.mode === 'live' ? 'LIVE (emails really go out)' : 'TEST (dry-run: emails are written and logged but NOT sent)'}`,
     `Agent paused: ${settings.paused ? 'yes' : 'no'}`,
