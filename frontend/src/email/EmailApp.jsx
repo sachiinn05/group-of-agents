@@ -50,6 +50,7 @@ export default function EmailApp({ onLogout, onBack }) {
   useEffect(() => {
     const socket = io({ auth: { token: getToken() } });
     socket.on('agent:event', (e) => {
+      if (e.agent === 'khata') return; // that is the Payment Reminder Agent's feed
       setEvents((list) => [{ id: e.id, kind: e.kind, text: e.text, at: e.at }, ...(list || [])].slice(0, 80));
       setUnseen((n) => n + 1);
       if (['read', 'decide', 'write'].includes(e.kind)) setInboxKey((k) => k + 1);

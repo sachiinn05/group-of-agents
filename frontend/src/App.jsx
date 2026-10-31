@@ -3,6 +3,7 @@ import Login from './Login.jsx';
 import Home from './Home.jsx';
 import Dashboard from './Dashboard.jsx';
 import EmailApp from './email/EmailApp.jsx';
+import KhataApp from './khata/KhataApp.jsx';
 import ShopChat from './ShopChat.jsx';
 import { getToken, clearToken } from './api.js';
 
@@ -25,5 +26,6 @@ export default function App() {
   if (!loggedIn) return <Login onAuth={() => setLoggedIn(true)} />;
   if (agent === 'shop') return <Dashboard onLogout={logout} onBack={() => setAgent(null)} />;
   if (agent === 'email') return <EmailApp onLogout={logout} onBack={() => setAgent(null)} />;
+  if (agent === 'khata') return <KhataApp onLogout={logout} onBack={() => setAgent(null)} />;
   return <Home onPick={setAgent} onLogout={logout} />;
 }

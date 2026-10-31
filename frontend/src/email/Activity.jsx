@@ -12,7 +12,7 @@ const ago = (date) => {
 };
 
 // What the agent is doing, newest first. New lines appear live as it works.
-export default function Activity({ events }) {
+export default function Activity({ events, onCheck = runEmailRulesNow, help }) {
   const [checking, setChecking] = useState(false);
   const [note, setNote] = useState('');
 
@@ -20,7 +20,7 @@ export default function Activity({ events }) {
     setChecking(true);
     setNote('');
     try {
-      const r = await runEmailRulesNow(); // reads the inbox, then runs the situations
+      const r = await onCheck(); // reads the inbox, then does the agent's round
       setNote(r.stoppedBecause ? `Stopped: ${r.stoppedBecause}` : r.written ? `Wrote ${r.written} email${r.written > 1 ? 's' : ''}.` : 'Checked. Nothing needed an email right now.');
     } catch (e) {
       setNote(e.message);
@@ -31,7 +31,7 @@ export default function Activity({ events }) {
 
   return (
     <div className="panel-stack">
-      <p className="muted">Everything the agent does shows up here as it happens. It checks your inbox and your situations every minute.</p>
+      <p className="muted">{help || 'Everything the agent does shows up here as it happens. It checks your inbox and your situations every minute.'}</p>
       <div className="link-row">
         <button className="btn small ghost" onClick={checkNow} disabled={checking}>{checking ? 'Checking...' : 'Check now'}</button>
         {note && <span className="ok">{note}</span>}

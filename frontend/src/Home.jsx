@@ -13,6 +13,12 @@ const AGENTS = [
     title: 'Email Agent',
     text: 'Sends emails by itself, depending on the situation: follow-ups after 5 days with no reply, welcome emails, thank-yous. It writes each one and sends it from your Gmail.',
   },
+  {
+    key: 'khata',
+    icon: '💸',
+    title: 'Payment Reminder Agent',
+    text: 'Add who owes you money and when it is due. It sends polite reminders by itself (gentle, then firm, then final), and stops when they pay or reply.',
+  },
 ];
 
 export default function Home({ onPick, onLogout }) {

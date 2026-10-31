@@ -95,6 +95,22 @@ export const sendInboxDraft = (id, subject, body) => request(`/email/inbox/${id}
 export const dismissInboxDraft = (id) => request(`/email/inbox/${id}/dismiss`, { method: 'POST', body: {} });
 export const getActivity = () => request('/email/activity');
 
+// ---- Payment Reminder (Khata) Agent ----
+export const getKhataSettings = () => request('/khata/settings');
+export const saveKhataSettings = (fields) => request('/khata/settings', { method: 'PUT', body: fields });
+export const getKhataSummary = () => request('/khata/summary');
+export const getDues = (status = 'unpaid') => request(`/khata/dues?status=${status}`);
+export const addDue = (due) => request('/khata/dues', { body: due });
+export const addDuesBulk = (text) => request('/khata/dues/bulk', { body: { text } });
+export const updateDue = (id, fields) => request(`/khata/dues/${id}`, { method: 'PATCH', body: fields });
+export const deleteDue = (id) => request(`/khata/dues/${id}`, { method: 'DELETE' });
+export const payDue = (id, payment) => request(`/khata/dues/${id}/payment`, { body: payment });
+export const getDueMessage = (id, tone) => request(`/khata/dues/${id}/message${tone ? `?tone=${tone}` : ''}`);
+export const getReminderLog = () => request('/khata/log');
+export const retryReminder = (id) => request(`/khata/log/${id}/retry`, { method: 'POST', body: {} });
+export const runKhataNow = () => request('/khata/run-now', { method: 'POST', body: {} });
+export const getKhataActivity = () => request('/khata/activity');
+
 // ---- customer (no login) ----
 export const getShop = (slug) => request(`/public/${slug}`);
 export const getShopHistory = (slug, sessionId) => request(`/public/${slug}/history?sessionId=${sessionId}`);
