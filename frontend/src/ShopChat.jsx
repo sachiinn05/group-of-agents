@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
-import { getShop, getShopHistory, sendShopMessage } from './api.js';
+import { getShop, getShopHistory, getShopOrders, sendShopMessage } from './api.js';
+import ShopOrders from './ShopOrders.jsx';
 
 // The page a shop's customers see at /shop/<slug>. No login.
 function sessionFor(slug) {
@@ -13,20 +14,39 @@ function sessionFor(slug) {
   return id;
 }
 
+const rupees = (n) => `₹${Number(n).toFixed(2).replace(/\.00$/, '')}`;
+const isActive = (o) => ['pending', 'accepted', 'out_for_delivery'].includes(o.status);
+
 export default function ShopChat({ slug }) {
   const [sessionId] = useState(() => sessionFor(slug));
   const [shop, setShop] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [showOrders, setShowOrders] = useState(false);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const bottom = useRef(null);
 
+  const loadOrders = useCallback(
+    () => getShopOrders(slug, sessionId).then(setOrders).catch(() => {}),
+    [slug, sessionId]
+  );
+
   useEffect(() => {
     getShop(slug).then(setShop).catch(() => setNotFound(true));
     getShopHistory(slug, sessionId).then(setMessages).catch(() => {});
-  }, [slug, sessionId]);
+    loadOrders();
+  }, [slug, sessionId, loadOrders]);
+
+  // Keep order status fresh while an order is open or the orders panel is showing.
+  const hasActive = orders.some(isActive);
+  useEffect(() => {
+    if (!hasActive && !showOrders) return;
+    const timer = setInterval(loadOrders, 10000);
+    return () => clearInterval(timer);
+  }, [hasActive, showOrders, loadOrders]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' });
@@ -40,8 +60,9 @@ export default function ShopChat({ slug }) {
     setMessages((m) => [...m, { role: 'user', content: text }]);
     setSending(true);
     try {
-      const { reply, leadSaved } = await sendShopMessage(slug, sessionId, text);
-      setMessages((m) => [...m, { role: 'assistant', content: reply, leadSaved }]);
+      const { reply, leadSaved, orders: placed } = await sendShopMessage(slug, sessionId, text);
+      setMessages((m) => [...m, { role: 'assistant', content: reply, leadSaved, placed }]);
+      if (placed?.length) loadOrders();
     } catch (e) {
       setError(e.message);
     } finally {
@@ -62,34 +83,52 @@ export default function ShopChat({ slug }) {
   return (
     <div className="shop-page">
       <header className="shop-head">
-        <h1>{shop.name}</h1>
-        <span>{[shop.timings, shop.address].filter(Boolean).join(' · ')}</span>
-      </header>
-      <div className="messages">
-        <div className="msg assistant">
-          Hi! Welcome to {shop.name}. Ask me about products, prices, timings or delivery, or tell me what you want to order.
+        <div>
+          <h1>{shop.name}</h1>
+          <span>{[shop.timings, shop.address].filter(Boolean).join(' · ')}</span>
         </div>
-        {messages.map((m, i) => (
-          <div key={i} className={`msg ${m.role}`}>
-            {m.role === 'assistant' ? <Markdown>{m.content}</Markdown> : m.content}
-            {m.leadSaved && <div className="lead-ok">✓ Sent to the shop. They will contact you.</div>}
+        <button className="btn small ghost" onClick={() => setShowOrders(!showOrders)}>
+          {showOrders ? 'Back to chat' : `My orders${orders.length ? ` (${orders.length})` : ''}`}
+        </button>
+      </header>
+
+      {showOrders ? (
+        <ShopOrders slug={slug} sessionId={sessionId} orders={orders} onChanged={loadOrders} />
+      ) : (
+        <>
+          <div className="messages">
+            <div className="msg assistant">
+              Hi! Welcome to {shop.name}. Ask me about products, prices, timings or delivery, or tell me what you want to order.
+            </div>
+            {messages.map((m, i) => (
+              <div key={i} className={`msg ${m.role}`}>
+                {m.role === 'assistant' ? <Markdown>{m.content}</Markdown> : m.content}
+                {m.leadSaved && <div className="lead-ok">✓ Sent to the shop. They will contact you.</div>}
+                {m.placed?.map((o) => (
+                  <div key={o.id} className="lead-ok">
+                    ✓ Order #{o.shortId} sent to the shop: {rupees(o.total)}
+                    {o.payUrl && <div><a className="btn small" href={o.payUrl}>Pay {rupees(o.total)} with UPI</a></div>}
+                  </div>
+                ))}
+              </div>
+            ))}
+            {sending && <div className="typing">typing...</div>}
+            {error && <div className="error">{error}</div>}
+            <div ref={bottom} />
           </div>
-        ))}
-        {sending && <div className="typing">typing...</div>}
-        {error && <div className="error">{error}</div>}
-        <div ref={bottom} />
-      </div>
-      <div className="composer">
-        <textarea
-          rows={1}
-          placeholder="Type your message..."
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={onKeyDown}
-          maxLength={1000}
-        />
-        <button className="btn" onClick={send} disabled={sending || !input.trim()}>Send</button>
-      </div>
+          <div className="composer">
+            <textarea
+              rows={1}
+              placeholder="Type your message..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={onKeyDown}
+              maxLength={1000}
+            />
+            <button className="btn" onClick={send} disabled={sending || !input.trim()}>Send</button>
+          </div>
+        </>
+      )}
       <footer className="shop-foot">Answers come from the shop's own information.</footer>
     </div>
   );

@@ -136,7 +136,32 @@ input:focus, textarea:focus { border-color: var(--accent); }
 /* ---------- customer shop chat ---------- */
 .shop-page { height: 100dvh; max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; }
 
-.shop-head { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.shop-head { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.small { font-size: 12px; }
+
+/* products */
+.add-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; }
+.add-row input, .bulk { padding: 9px 10px; width: 100%; min-width: 0; }
+.bulk { font-family: inherit; resize: vertical; }
+.product-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.product-row.off .product-name { opacity: 0.55; }
+.product-name { flex: 1 1 160px; display: grid; }
+.mini { display: flex; align-items: center; gap: 5px; font-size: 13px; color: var(--muted); }
+.mini input { width: 78px; padding: 6px 8px; color: var(--text); }
+
+/* orders */
+.order-total { display: flex; justify-content: space-between; padding-top: 6px; border-top: 1px solid var(--border); }
+.order.cancelled { opacity: 0.55; }
+.tag { padding: 2px 9px; border-radius: 999px; font-size: 12px; background: var(--panel-2); border: 1px solid var(--border); }
+.tag.pending { background: #3a3320; border-color: #7a6a2a; }
+.tag.accepted, .tag.out_for_delivery { background: var(--accent-dim); border-color: var(--accent); }
+.tag.delivered { background: #1f3a2b; border-color: #2f6b49; }
+.orders-panel { flex: 1; overflow-y: auto; padding: 16px; display: grid; gap: 12px; align-content: start; }
+.order-card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: grid; gap: 8px; }
+.rate { display: grid; gap: 8px; }
+.rate input { padding: 9px 10px; }
+.star { background: none; border: 0; font-size: 26px; color: var(--border); padding: 0 2px; }
+.star.on { color: #f5c542; }
 .shop-head h1 { margin: 0; font-size: 18px; }
 .shop-head span { color: var(--muted); font-size: 13px; }
 
