@@ -71,6 +71,27 @@ export function startTelegramPolling() {
   })();
 }
 
+const rupees = (n) => `₹${Number(n).toFixed(2).replace(/\.00$/, '')}`;
+
+// Tells the owner about a new order, with the items and the server-calculated total.
+export async function notifyOrder(business, order) {
+  const chatId = business.telegram?.chatId;
+  if (!chatId || !telegramConfigured()) return;
+  const lines = [
+    `🛍 New order #${String(order._id).slice(-6).toUpperCase()} - ${business.name}`,
+    `${order.customerName || 'Customer'} · ${order.phone}`,
+    order.fulfilment === 'pickup' ? 'Pickup from shop' : `Deliver to: ${order.address}`,
+    ...order.items.map((i) => `- ${i.qty} x ${i.name}${i.unit ? ` (${i.unit})` : ''} = ${rupees(i.price * i.qty)}`),
+    `Total: ${rupees(order.total)}`,
+    order.note ? `Note: ${order.note}` : '',
+  ].filter(Boolean);
+  try {
+    await sendTelegram(chatId, lines.join('\n'));
+  } catch (e) {
+    console.error('telegram order alert failed:', e.message);
+  }
+}
+
 // Tells the owner about a customer. Never throws: a failed alert must not break the customer's chat.
 export async function notifyLead(business, lead, { updated = false } = {}) {
   const chatId = business.telegram?.chatId;

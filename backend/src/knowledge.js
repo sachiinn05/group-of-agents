@@ -5,7 +5,7 @@ const WHOLE_IF_UNDER = 4000; // small knowledge bases are sent whole
 const CHUNK_SIZE = 600;
 const TOP_CHUNKS = 4;
 
-const tokenize = (s) => (s.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).filter((t) => t.length > 1);
+export const tokenize = (s) => (s.toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).filter((t) => t.length > 1);
 
 // Splits text into chunks of roughly CHUNK_SIZE characters, breaking on lines.
 function chunk(filename, text) {
