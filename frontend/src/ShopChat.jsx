@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
-import { getShop, getShopHistory, getShopOrders, sendShopMessage } from './api.js';
+import { getShop, getShopHistory, getShopMenu, getShopOrders, sendShopMessage } from './api.js';
 import ShopOrders from './ShopOrders.jsx';
+import Menu, { rupees } from './Menu.jsx';
+import Cart from './Cart.jsx';
 
 // The page a shop's customers see at /shop/<slug>. No login.
 function sessionFor(slug) {
@@ -14,16 +16,25 @@ function sessionFor(slug) {
   return id;
 }
 
-const rupees = (n) => `₹${Number(n).toFixed(2).replace(/\.00$/, '')}`;
+const loadCart = (slug) => {
+  try {
+    return JSON.parse(localStorage.getItem(`shop_cart_${slug}`)) || {};
+  } catch {
+    return {};
+  }
+};
+
 const isActive = (o) => ['pending', 'accepted', 'out_for_delivery'].includes(o.status);
 
 export default function ShopChat({ slug }) {
   const [sessionId] = useState(() => sessionFor(slug));
   const [shop, setShop] = useState(null);
+  const [menu, setMenu] = useState(null);
   const [notFound, setNotFound] = useState(false);
+  const [view, setView] = useState('chat'); // chat | menu | cart | orders
+  const [cart, setCart] = useState(() => loadCart(slug)); // { productId: qty }
   const [messages, setMessages] = useState([]);
   const [orders, setOrders] = useState([]);
-  const [showOrders, setShowOrders] = useState(false);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -36,21 +47,43 @@ export default function ShopChat({ slug }) {
 
   useEffect(() => {
     getShop(slug).then(setShop).catch(() => setNotFound(true));
+    getShopMenu(slug).then(setMenu).catch(() => {});
     getShopHistory(slug, sessionId).then(setMessages).catch(() => {});
     loadOrders();
   }, [slug, sessionId, loadOrders]);
 
-  // Keep order status fresh while an order is open or the orders panel is showing.
+  useEffect(() => {
+    localStorage.setItem(`shop_cart_${slug}`, JSON.stringify(cart));
+  }, [slug, cart]);
+
+  // Cart lines come from the live menu, so removed or sold-out items drop out.
+  const lines = useMemo(
+    () => (menu?.products || []).filter((p) => p.available && cart[p.id] > 0).map((p) => ({ ...p, qty: cart[p.id] })),
+    [menu, cart]
+  );
+  const count = lines.reduce((n, l) => n + l.qty, 0);
+  const total = lines.reduce((s, l) => s + l.price * l.qty, 0);
+
+  function setQty(id, qty) {
+    setCart((c) => {
+      const next = { ...c };
+      if (qty > 0) next[id] = Math.min(qty, 99);
+      else delete next[id];
+      return next;
+    });
+  }
+
+  // Keep order status fresh while an order is open or the orders tab is showing.
   const hasActive = orders.some(isActive);
   useEffect(() => {
-    if (!hasActive && !showOrders) return;
+    if (!hasActive && view !== 'orders') return;
     const timer = setInterval(loadOrders, 10000);
     return () => clearInterval(timer);
-  }, [hasActive, showOrders, loadOrders]);
+  }, [hasActive, view, loadOrders]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, sending]);
+  }, [messages, sending, view]);
 
   async function send() {
     const text = input.trim();
@@ -77,6 +110,17 @@ export default function ShopChat({ slug }) {
     }
   }
 
+  // An order placed from the cart: confirm it in the chat and clear the cart.
+  function onPlaced(order) {
+    setCart({});
+    setMessages((m) => [
+      ...m,
+      { role: 'assistant', content: `Your order #${order.shortId} for ${rupees(order.total)} was sent to the shop. They will confirm it soon.`, placed: [order] },
+    ]);
+    loadOrders();
+    setView('chat');
+  }
+
   if (notFound) return <div className="auth-wrap"><div className="auth-card"><h1>Shop not found</h1><p>Check the link and try again.</p></div></div>;
   if (!shop) return <div className="auth-wrap"><p className="muted">Loading...</p></div>;
 
@@ -87,18 +131,26 @@ export default function ShopChat({ slug }) {
           <h1>{shop.name}</h1>
           <span>{[shop.timings, shop.address].filter(Boolean).join(' · ')}</span>
         </div>
-        <button className="btn small ghost" onClick={() => setShowOrders(!showOrders)}>
-          {showOrders ? 'Back to chat' : `My orders${orders.length ? ` (${orders.length})` : ''}`}
-        </button>
       </header>
+      <nav className="shop-tabs">
+        <button className={view === 'chat' ? 'on' : ''} onClick={() => setView('chat')}>Chat</button>
+        <button className={view === 'menu' ? 'on' : ''} onClick={() => setView('menu')}>Menu</button>
+        <button className={view === 'cart' ? 'on' : ''} onClick={() => setView('cart')}>Cart{count ? ` (${count})` : ''}</button>
+        <button className={view === 'orders' ? 'on' : ''} onClick={() => setView('orders')}>Orders{orders.length ? ` (${orders.length})` : ''}</button>
+      </nav>
 
-      {showOrders ? (
-        <ShopOrders slug={slug} sessionId={sessionId} orders={orders} onChanged={loadOrders} />
-      ) : (
+      {view === 'menu' && <Menu menu={menu} cart={cart} setQty={setQty} count={count} total={total} onOpenCart={() => setView('cart')} />}
+      {view === 'cart' && (
+        <Cart slug={slug} sessionId={sessionId} menu={menu} lines={lines} total={total} setQty={setQty}
+          onPlaced={onPlaced} onBrowse={() => setView('menu')} />
+      )}
+      {view === 'orders' && <ShopOrders slug={slug} sessionId={sessionId} orders={orders} onChanged={loadOrders} />}
+
+      {view === 'chat' && (
         <>
           <div className="messages">
             <div className="msg assistant">
-              Hi! Welcome to {shop.name}. Ask me about products, prices, timings or delivery, or tell me what you want to order.
+              Hi! Welcome to {shop.name}. Ask me anything, or tap <b>Menu</b> to browse items and add them to your cart.
             </div>
             {messages.map((m, i) => (
               <div key={i} className={`msg ${m.role}`}>
@@ -106,7 +158,7 @@ export default function ShopChat({ slug }) {
                 {m.leadSaved && <div className="lead-ok">✓ Sent to the shop. They will contact you.</div>}
                 {m.placed?.map((o) => (
                   <div key={o.id} className="lead-ok">
-                    ✓ Order #{o.shortId} sent to the shop: {rupees(o.total)}
+                    ✓ Order #{o.shortId}: {rupees(o.total)}
                     {o.payUrl && <div><a className="btn small" href={o.payUrl}>Pay {rupees(o.total)} with UPI</a></div>}
                   </div>
                 ))}

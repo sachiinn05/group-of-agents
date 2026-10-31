@@ -1,4 +1,5 @@
 :root {
+  color-scheme: dark; /* dark scrollbars and form controls */
   --bg: #0f1115;
   --panel: #171a21;
   --panel-2: #1e222b;
@@ -138,6 +139,33 @@ input:focus, textarea:focus { border-color: var(--accent); }
 
 .shop-head { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .small { font-size: 12px; }
+
+/* customer tabs, menu and cart */
+.shop-tabs { display: flex; border-bottom: 1px solid var(--border); }
+.shop-tabs button { flex: 1; padding: 11px 6px; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font-weight: 600; }
+.shop-tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+
+.menu-panel { flex: 1; overflow-y: auto; padding: 16px; display: grid; gap: 10px; align-content: start; }
+.menu-search { padding: 10px 12px; width: 100%; }
+.menu-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+.menu-item.off { opacity: 0.5; }
+.menu-name { flex: 1; display: grid; min-width: 0; }
+
+.stepper { display: inline-flex; align-items: center; border: 1px solid var(--accent); border-radius: 8px; overflow: hidden; }
+.stepper button { width: 34px; height: 32px; background: var(--accent-dim); border: 0; font-size: 18px; }
+.stepper span { min-width: 30px; text-align: center; font-weight: 600; }
+
+.cart-bar {
+  position: sticky; bottom: 0; margin: 0 16px 8px; padding: 13px 16px;
+  display: flex; justify-content: space-between; align-items: center;
+  background: var(--accent); color: #fff; border: 0; border-radius: 12px;
+}
+.cart-title { margin: 0; }
+.checkout { display: grid; gap: 8px; }
+.checkout input, .checkout textarea { padding: 10px 12px; width: 100%; font-family: inherit; }
+.seg { display: flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.seg button { flex: 1; padding: 9px; background: none; border: 0; color: var(--muted); font-weight: 600; }
+.seg button.on { background: var(--accent-dim); color: var(--text); }
 
 /* products */
 .add-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; }
