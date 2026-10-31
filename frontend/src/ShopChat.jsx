@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Markdown from 'react-markdown';
+import { io } from 'socket.io-client';
 import { getShop, getShopHistory, getShopMenu, getShopOrders, sendShopMessage } from './api.js';
 import ShopOrders from './ShopOrders.jsx';
 import Menu, { rupees } from './Menu.jsx';
@@ -35,8 +36,6 @@ function saveCustomerDetails(profile) {
   localStorage.setItem('shop_customer_details', JSON.stringify({ ...saved, ...profile }));
 }
 
-const isActive = (o) => ['pending', 'accepted', 'out_for_delivery'].includes(o.status);
-
 export default function ShopChat({ slug }) {
   const [sessionId] = useState(() => sessionFor(slug));
   const [shop, setShop] = useState(null);
@@ -46,6 +45,7 @@ export default function ShopChat({ slug }) {
   const [cart, setCart] = useState(() => loadCart(slug)); // { productId: qty }
   const [messages, setMessages] = useState([]);
   const [orders, setOrders] = useState([]);
+  const [unread, setUnread] = useState(0); // messages that arrived while another tab was open
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
@@ -84,21 +84,30 @@ export default function ShopChat({ slug }) {
     });
   }
 
-  // While an order is open (or the orders tab is showing) keep its status fresh, and pull in
-  // messages the shop owner caused (accepted, out for delivery...) so they show in the chat too.
-  const sendingRef = useRef(false);
-  sendingRef.current = sending;
-  const hasActive = orders.some(isActive);
+  // Live updates: when the shop owner accepts, ships or cancels an order, the server pushes it here
+  // over a socket, so the message and the order status appear straight away.
+  const viewRef = useRef(view);
+  viewRef.current = view;
   useEffect(() => {
-    if (!hasActive && view !== 'orders') return;
-    const timer = setInterval(async () => {
+    const socket = io();
+
+    // After the first connect and after any reconnect, fetch whatever was missed while offline.
+    const catchUp = async () => {
       loadOrders();
-      if (sendingRef.current) return;
       const saved = await getShopHistory(slug, sessionId).catch(() => null);
       if (saved) setMessages((m) => (saved.length > m.length ? [...m, ...saved.slice(m.length)] : m));
-    }, 8000);
-    return () => clearInterval(timer);
-  }, [hasActive, view, loadOrders, slug, sessionId]);
+    };
+    socket.on('connect', () => socket.emit('join', { slug, sessionId }, (r) => r?.ok && catchUp()));
+
+    socket.on('chat:message', (msg) => {
+      setMessages((m) => (m.at(-1)?.content === msg.content ? m : [...m, msg]));
+      if (viewRef.current !== 'chat') setUnread((n) => n + 1);
+    });
+    socket.on('order:update', (order) =>
+      setOrders((list) => (list.some((o) => o.id === order.id) ? list.map((o) => (o.id === order.id ? order : o)) : [order, ...list]))
+    );
+    return () => socket.close();
+  }, [slug, sessionId, loadOrders]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' });
@@ -149,6 +158,7 @@ export default function ShopChat({ slug }) {
     ]);
     loadOrders();
     setView('chat');
+    setUnread(0);
   }
 
   if (notFound) return <div className="auth-wrap"><div className="auth-card"><h1>Shop not found</h1><p>Check the link and try again.</p></div></div>;
@@ -163,7 +173,9 @@ export default function ShopChat({ slug }) {
         </div>
       </header>
       <nav className="shop-tabs">
-        <button className={view === 'chat' ? 'on' : ''} onClick={() => setView('chat')}>Chat</button>
+        <button className={view === 'chat' ? 'on' : ''} onClick={() => { setView('chat'); setUnread(0); }}>
+          Chat{unread > 0 && <span className="badge">{unread}</span>}
+        </button>
         <button className={view === 'menu' ? 'on' : ''} onClick={() => setView('menu')}>Menu</button>
         <button className={view === 'cart' ? 'on' : ''} onClick={() => setView('cart')}>Cart{count ? ` (${count})` : ''}</button>
         <button className={view === 'orders' ? 'on' : ''} onClick={() => setView('orders')}>Orders{orders.length ? ` (${orders.length})` : ''}</button>
