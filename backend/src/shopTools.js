@@ -26,6 +26,8 @@ const validPhone = (raw) => {
   return digits.length >= 8 && digits.length <= 15 ? phone : null;
 };
 
+export const isAvailable = available;
+
 export const TOOLS = [
   {
     type: 'function',
@@ -95,7 +97,11 @@ async function searchProducts(business, args) {
     .filter((x) => x.score > 0 || terms.length === 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 8);
+  // A general request like "food" matches no product name. Show some items instead of nothing.
+  const noMatch = scored.length === 0 && products.length > 0;
+  if (noMatch) products.slice(0, 8).forEach((p) => scored.push({ p, score: 0 }));
   return {
+    ...(noMatch && { note: 'No exact match. These are some of the shop\'s items. Show them and tell the customer they can tap Menu to see everything.' }),
     products: scored.map(({ p }) => ({
       product_id: p.id,
       name: p.name,
@@ -108,17 +114,17 @@ async function searchProducts(business, args) {
   };
 }
 
-async function placeOrder(business, sessionId, args, state) {
+export async function placeOrder(business, sessionId, args, state) {
   const fulfilment = args.fulfilment === 'pickup' ? 'pickup' : 'delivery';
   const phone = validPhone(args.phone);
-  if (!phone) return { error: 'Need a valid phone number from the customer. Ask for it.' };
+  if (!phone) return { error: 'Please enter a valid phone number.' };
 
   const address = String(args.address || '').trim();
   if (fulfilment === 'delivery') {
-    if (address.length < 5) return { error: 'Need the full delivery address. Ask for it, or offer pickup.' };
+    if (address.length < 5) return { error: 'Please enter the full delivery address, or choose pickup.' };
     const areas = business.deliveryAreas || [];
     if (areas.length && !areas.some((a) => address.toLowerCase().includes(a))) {
-      return { error: `We do not deliver to that address. We deliver to: ${areas.join(', ')}. Offer pickup instead.` };
+      return { error: `We do not deliver to that address. We deliver to: ${areas.join(', ')}. You can choose pickup instead.` };
     }
   }
 
@@ -126,21 +132,21 @@ async function placeOrder(business, sessionId, args, state) {
   for (const it of Array.isArray(args.items) ? args.items : []) {
     const qty = Math.round(Number(it.qty) * 100) / 100;
     if (!mongoose.isValidObjectId(it.product_id) || !(qty > 0) || qty > 1000) {
-      return { error: 'Each item needs a product_id from search_products and a quantity above 0.' };
+      return { error: 'Some items in the cart are invalid. Please refresh the menu and try again.' };
     }
     wanted.set(String(it.product_id), (wanted.get(String(it.product_id)) || 0) + qty);
   }
-  if (wanted.size === 0 || wanted.size > 30) return { error: 'Order needs between 1 and 30 different products.' };
+  if (wanted.size === 0 || wanted.size > 30) return { error: 'An order needs between 1 and 30 different products.' };
 
   const open = await Order.countDocuments({ businessId: business._id, sessionId, status: 'pending' });
-  if (open >= MAX_OPEN_ORDERS_PER_SESSION) return { error: 'There are already several pending orders from this chat. Ask the customer to wait for the shop to confirm.' };
+  if (open >= MAX_OPEN_ORDERS_PER_SESSION) return { error: 'You already have several pending orders. Please wait for the shop to confirm them.' };
 
   const products = await Product.find({ _id: { $in: [...wanted.keys()] }, businessId: business._id });
   const byId = new Map(products.map((p) => [p.id, p]));
   const items = [];
   for (const [id, qty] of wanted) {
     const p = byId.get(id);
-    if (!p) return { error: 'One of those products is no longer sold. Search again.' };
+    if (!p) return { error: 'One of those products is no longer sold. Please refresh the menu.' };
     if (!available(p) || (p.stockQty !== null && p.stockQty < qty)) {
       return { error: `${p.name} is not available in that quantity${p.stockQty ? ` (only ${p.stockQty} left)` : ''}.` };
     }

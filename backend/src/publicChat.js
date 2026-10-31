@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
-import { Business, Order, PublicMessage } from './db.js';
+import { Business, Order, Product, PublicMessage } from './db.js';
 import { findKnowledge } from './knowledge.js';
 import { shopPrompt } from './shopPrompt.js';
 import { runToolLoop } from './toolLoop.js';
-import { TOOLS, executeTool, shortId, upiLink } from './shopTools.js';
+import { TOOLS, executeTool, placeOrder, isAvailable, shortId, upiLink } from './shopTools.js';
 
 // Customer-facing routes. No login: anyone with the shop link can chat.
 const router = Router();
@@ -50,6 +50,42 @@ router.get('/:slug/history', async (req, res) => {
   if (!business || !SESSION_RE.test(sessionId)) return res.json([]);
   const messages = await PublicMessage.find({ businessId: business._id, sessionId }).sort({ _id: 1 }).limit(100);
   res.json(messages.map((m) => ({ role: m.role, content: m.content })));
+});
+
+// The shop's menu, for the Add to cart screen
+router.get('/:slug/products', async (req, res) => {
+  const business = await Business.findOne({ slug: req.params.slug });
+  if (!business) return res.status(404).json({ error: 'shop not found' });
+  const products = await Product.find({ businessId: business._id }).sort({ name: 1 }).limit(500);
+  res.json({
+    upi: !!business.info?.upiId,
+    deliveryAreas: business.deliveryAreas || [],
+    products: products.map((p) => ({ id: p.id, name: p.name, unit: p.unit, price: p.price, available: isAvailable(p) })),
+  });
+});
+
+// Place an order straight from the cart. Same checks and server-side total as when the agent does it.
+router.post('/:slug/orders', async (req, res) => {
+  if (rateLimited(req.ip)) return res.status(429).json({ error: 'Too many requests. Please wait a minute.' });
+  const business = await Business.findOne({ slug: req.params.slug });
+  if (!business) return res.status(404).json({ error: 'shop not found' });
+  const sessionId = String(req.body.sessionId || '');
+  if (!SESSION_RE.test(sessionId)) return res.status(400).json({ error: 'invalid sessionId' });
+
+  const items = (Array.isArray(req.body.items) ? req.body.items : []).map((i) => ({ product_id: i.product_id, qty: i.qty }));
+  const state = { orders: [] };
+  const result = await placeOrder(business, sessionId, { ...req.body, items }, state);
+  if (result.error) return res.status(400).json({ error: result.error });
+
+  // Put a line in the chat, so the conversation (and the agent) knows the order exists.
+  const placed = state.orders[0];
+  await PublicMessage.create({
+    businessId: business._id,
+    sessionId,
+    role: 'assistant',
+    content: `Your order #${placed.shortId} for ₹${placed.total} was sent to the shop. They will confirm it soon.`,
+  });
+  res.status(201).json({ order: placed });
 });
 
 // This customer's orders (found by their session), with status
