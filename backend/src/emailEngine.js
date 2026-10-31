@@ -1,6 +1,7 @@
-import { EmailSettings, Contact, Rule, EmailLog, User, TRIGGERS } from './db.js';
+import { EmailSettings, Contact, Rule, EmailLog, TRIGGERS } from './db.js';
 import { composeEmail, withSignature } from './emailCompose.js';
-import { sendGmail } from './google.js';
+import { getConnection, sendMail } from './mail.js';
+import { logActivity, logActivityOnce } from './activity.js';
 
 // The Email Agent's engine. It looks for people who are in a situation a rule describes, has the AI write
 // the email, and sends it, all by itself. Safety comes first: one email per situation per person, a daily
@@ -34,15 +35,22 @@ export function validateRule(body) {
   };
 }
 
-// Contacts that are in the rule's situation right now, and the key that marks "we already handled this".
+// Contacts that are in the rule's situation right now.
 function dueQuery(rule, now) {
   const base = { userId: rule.userId, optedOut: false };
   const { type, status, days } = rule.trigger;
   if (type === 'contact_added') return { ...base, createdAt: { $gt: new Date(now - DAY) } };
   if (type === 'status_changed') return { ...base, status, statusAt: { $gt: new Date(now - DAY) } };
-  return { ...base, status, statusAt: { $lte: new Date(now - days * DAY), $gt: new Date(now - (days + STALE_GRACE_DAYS) * DAY) } };
+  return {
+    ...base,
+    status,
+    statusAt: { $lte: new Date(now - days * DAY), $gt: new Date(now - (days + STALE_GRACE_DAYS) * DAY) },
+    // "N days with no change" also means no reply: someone who wrote back since the status changed needs no follow-up.
+    $expr: { $lt: [{ $ifNull: ['$lastRepliedAt', new Date(0)] }, '$statusAt'] },
+  };
 }
 
+// The key that marks "we already handled this situation for this person".
 const dedupeKey = (rule, contact) =>
   rule.trigger.type === 'contact_added' ? 'added' : `${rule.trigger.type === 'status_changed' ? 's' : 'd'}:${new Date(contact.statusAt).getTime()}`;
 
@@ -50,7 +58,16 @@ const situationText = (rule) => {
   const { type, status, days } = rule.trigger;
   if (type === 'contact_added') return 'The contact was just added.';
   if (type === 'status_changed') return `The contact's status just became "${status}".`;
-  return `The contact has been in the status "${status}" for ${days} or more days, with no change.`;
+  return `The contact has been in the status "${status}" for ${days} or more days, with no change and no reply.`;
+};
+
+// Why the agent is writing, in one line for the Sent emails list.
+const reasonText = (rule, contact) => {
+  const { type, status, days } = rule.trigger;
+  const who = contact.name || contact.email;
+  if (type === 'contact_added') return `${who} was added, and the situation "${rule.name}" welcomes new contacts.`;
+  if (type === 'status_changed') return `${who} moved to "${status}", which the situation "${rule.name}" watches.`;
+  return `${who} has been "${status}" for ${days}+ days with no reply (situation "${rule.name}").`;
 };
 
 // How many real emails went out (or are going out) in the last 24 hours.
@@ -61,22 +78,22 @@ const sentLast24h = (userId) =>
 export async function blockReason(userId, settings) {
   if (settings.paused) return 'The agent is paused.';
   if (settings.mode === 'live') {
-    const user = await User.findById(userId, 'google');
-    if (!user?.google?.refreshToken) return 'Gmail is not connected.';
+    if (!(await getConnection(userId))) return 'No email account is connected.';
     if ((await sentLast24h(userId)) >= settings.dailyLimit) return `Daily limit of ${settings.dailyLimit} emails reached.`;
   }
   return null;
 }
 
-// Sends one email (or, in dry-run mode, only records it). Claims the dedupe key FIRST, so two overlapping
+// Sends one email (or, in test mode, only records it). Claims the dedupe key FIRST, so two overlapping
 // runs can never send the same email twice. Returns the log, or null if it was already handled.
-export async function deliver({ userId, settings, to, subject, body, ruleId, contactId, source, key }) {
+// For a reply, pass inReplyTo and references so it lands in the same conversation.
+export async function deliver({ userId, settings, to, subject, body, ruleId, contactId, source, key, reason, inReplyTo, references }) {
   const live = settings.mode === 'live';
   const text = withSignature(body, settings);
   let log;
   try {
     log = await EmailLog.create({
-      userId, ruleId, contactId, source, to, subject, body: text,
+      userId, ruleId, contactId, source, to, subject, body: text, reason,
       outcome: live ? 'sending' : 'dry_run',
       // A preview must not use up the real key, so switching to live later still sends it.
       dedupeKey: key && (live ? key : `${key}:dry`),
@@ -88,8 +105,9 @@ export async function deliver({ userId, settings, to, subject, body, ruleId, con
   if (!live) return log;
 
   try {
-    await sendGmail(userId, { to, subject, body: text });
+    const sent = await sendMail(userId, { to, subject, body: text, inReplyTo, references });
     log.outcome = 'sent';
+    log.messageId = sent.messageId || undefined;
   } catch (e) {
     log.outcome = 'failed';
     log.error = e.message.slice(0, 300);
@@ -110,6 +128,7 @@ export async function runRule(rule, settings, { onlyContactId } = {}) {
     const stop = await blockReason(rule.userId, settings);
     if (stop) {
       result.stoppedBecause = stop;
+      await logActivityOnce(rule.userId, `Not sending: ${stop}`);
       break;
     }
     if (!isEmail(contact.email)) continue;
@@ -118,19 +137,30 @@ export async function runRule(rule, settings, { onlyContactId } = {}) {
     const seenKey = settings.mode === 'live' ? key : `${key}:dry`;
     if (await EmailLog.exists({ ruleId: rule._id, contactId: contact._id, dedupeKey: seenKey })) continue;
 
+    const who = contact.name || contact.email;
     try {
-      const email = await composeEmail({ settings, contact, instructions: rule.instructions, situation: situationText(rule) });
+      await logActivity(rule.userId, `Writing an email to ${who}: ${reasonText(rule, contact)}`, 'write');
+      const previous = await EmailLog.find({ userId: rule.userId, contactId: contact._id, outcome: { $in: ['sent', 'dry_run'] } }).sort({ _id: -1 }).limit(2);
+      const email = await composeEmail({ settings, contact, instructions: rule.instructions, situation: situationText(rule), previous });
       const log = await deliver({
         userId: rule.userId, settings, to: contact.email, subject: email.subject, body: email.body,
-        ruleId: rule._id, contactId: contact._id, source: 'rule', key,
+        ruleId: rule._id, contactId: contact._id, source: 'rule', key, reason: reasonText(rule, contact),
       });
       if (!log) continue;
       result.written++;
-      if (log.outcome === 'sent') result.sent++;
-      if (log.outcome === 'failed') result.failed++;
+      if (log.outcome === 'sent') {
+        result.sent++;
+        await logActivity(rule.userId, `Sent "${email.subject}" to ${who}.`, 'send');
+      } else if (log.outcome === 'failed') {
+        result.failed++;
+        await logActivity(rule.userId, `Could not send to ${who}: ${log.error}`, 'error');
+      } else {
+        await logActivity(rule.userId, `Prepared "${email.subject}" for ${who} (test mode, not sent).`, 'send');
+      }
     } catch (e) {
       console.error('email rule failed:', e.message);
       result.failed++;
+      await logActivity(rule.userId, `Could not write the email for ${who}: ${e.message}`, 'error');
     }
   }
   return result;
@@ -165,20 +195,4 @@ export function fireContactEvent(userId, contactId) {
       console.error('email event failed:', e.message);
     }
   });
-}
-
-// Every minute, check the time-based rules ("5 days with no change") for everyone.
-let running = false;
-export function startEmailScheduler() {
-  setInterval(async () => {
-    if (running) return;
-    running = true;
-    try {
-      for (const userId of await Rule.distinct('userId', { enabled: true })) await runForUser(userId);
-    } catch (e) {
-      console.error('email scheduler failed:', e.message);
-    } finally {
-      running = false;
-    }
-  }, 60_000);
 }
