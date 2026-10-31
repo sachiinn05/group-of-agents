@@ -86,8 +86,14 @@ export const retryEmail = (id) => request(`/email/log/${id}/retry`, { method: 'P
 export const runEmailRulesNow = () => request('/email/run-now', { method: 'POST', body: {} });
 export const getEmailChat = () => request('/email/chat');
 export const sendEmailChat = (message) => request('/email/chat', { body: { message } });
-export const getGmailUrl = () => request('/google/url');
-export const disconnectGmail = () => request('/google/disconnect', { method: 'POST', body: {} });
+export const getGmailUrl = () => request('/google/url'); // Google sign-in: can only send
+export const connectAppPassword = (email, password) => request('/email/connect/apppassword', { body: { email, password } });
+export const disconnectMailbox = () => request('/email/disconnect', { method: 'POST', body: {} });
+export const getInbox = () => request('/email/inbox');
+export const syncInboxNow = () => request('/email/inbox/sync', { method: 'POST', body: {} });
+export const sendInboxDraft = (id, subject, body) => request(`/email/inbox/${id}/send`, { body: { subject, body } });
+export const dismissInboxDraft = (id) => request(`/email/inbox/${id}/dismiss`, { method: 'POST', body: {} });
+export const getActivity = () => request('/email/activity');
 
 // ---- customer (no login) ----
 export const getShop = (slug) => request(`/public/${slug}`);

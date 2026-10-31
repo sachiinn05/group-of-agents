@@ -205,6 +205,18 @@ input:focus, textarea:focus { border-color: var(--accent); }
 .tag.sent { background: #1f3a2b; border-color: #2f6b49; }
 .tag.dry_run { background: #3a3320; border-color: #7a6a2a; }
 .tag.failed { background: #3a2020; border-color: #7a3a3a; }
+.feed { gap: 0; padding: 6px 14px; max-height: 65vh; overflow-y: auto; }
+.feed-row { display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; align-items: start; padding: 9px 0; border-bottom: 1px solid var(--border); }
+.feed-row:last-child { border-bottom: 0; }
+.feed-row.error .feed-text { color: var(--danger); }
+.feed-row.warn .feed-text { color: #e8c26a; }
+.feed-row.send .feed-text { color: var(--ok); }
+.feed-text { overflow-wrap: anywhere; }
+.steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: var(--muted); font-size: 14px; }
+.steps b { color: var(--text); }
+.draft { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--accent); border-radius: 10px; background: var(--panel-2); }
+.draft textarea { padding: 10px 12px; font-family: inherit; width: 100%; }
+details summary { cursor: pointer; padding: 4px 0; }
 .check-line { display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; color: var(--text) !important; }
 .check-line input { width: auto; }
 .card textarea { padding: 10px 12px; font-family: inherit; width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; }
