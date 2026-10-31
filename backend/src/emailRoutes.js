@@ -1,9 +1,13 @@
 import { Router } from 'express';
 import mongoose from 'mongoose';
-import { Contact, Rule, EmailLog, EmailChatMessage, User } from './db.js';
+import { Contact, Rule, EmailLog, EmailChatMessage, InboxMessage, AgentEvent, User } from './db.js';
 import { requireAuth } from './auth.js';
 import { getSettings, isEmail, validateRule, runForUser, fireContactEvent } from './emailEngine.js';
 import { emailAgentReply } from './emailAgent.js';
+import { getConnection, canRead, verifyAppPassword } from './mail.js';
+import { encrypt } from './secrets.js';
+import { syncInbox, sendDraft, dismissDraft } from './inbox.js';
+import { logActivity } from './activity.js';
 
 // The Email Agent's API. Everything here belongs to the logged-in user only.
 const router = Router();
@@ -14,10 +18,13 @@ const cleanStatus = (s) => String(s || '').trim().toLowerCase().slice(0, 40);
 
 // ---- settings ----
 const settingsView = async (userId) => {
-  const [s, user] = await Promise.all([getSettings(userId), User.findById(userId, 'google')]);
+  const [s, conn] = await Promise.all([getSettings(userId), getConnection(userId)]);
   return {
     mode: s.mode, paused: s.paused, dailyLimit: s.dailyLimit, senderName: s.senderName, signature: s.signature,
-    gmail: user?.google?.email || null,
+    about: s.about, tone: s.tone, styleSample: s.styleSample, inboxMode: s.inboxMode,
+    gmail: conn?.email || null, // the connected address (kept under this name for older screens)
+    connection: conn ? { type: conn.type, email: conn.email } : null, // apppassword can read the inbox, oauth can only send
+    canRead: canRead(conn),
     googleConfigured: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
   };
 };
@@ -26,15 +33,24 @@ router.get('/settings', async (req, res) => res.json(await settingsView(req.user
 
 router.put('/settings', async (req, res) => {
   const s = await getSettings(req.userId);
-  const { mode, paused, dailyLimit, senderName, signature } = req.body;
+  const { mode, paused, dailyLimit, senderName, signature, about, tone, styleSample, inboxMode } = req.body;
   if (mode !== undefined) {
     if (!['dryrun', 'live'].includes(mode)) return res.status(400).json({ error: 'invalid mode' });
-    if (mode === 'live') {
-      const user = await User.findById(req.userId, 'google');
-      if (!user?.google?.refreshToken) return res.status(400).json({ error: 'Connect Gmail before turning on live sending.' });
+    if (mode === 'live' && !(await getConnection(req.userId))) {
+      return res.status(400).json({ error: 'Connect Gmail before turning on live sending.' });
     }
     s.mode = mode;
   }
+  if (inboxMode !== undefined) {
+    if (!['off', 'draft', 'auto'].includes(inboxMode)) return res.status(400).json({ error: 'invalid inbox mode' });
+    s.inboxMode = inboxMode;
+  }
+  if (tone !== undefined) {
+    if (!['friendly', 'formal', 'short'].includes(tone)) return res.status(400).json({ error: 'invalid tone' });
+    s.tone = tone;
+  }
+  if (about !== undefined) s.about = String(about).trim().slice(0, 600);
+  if (styleSample !== undefined) s.styleSample = String(styleSample).trim().slice(0, 2500);
   if (paused !== undefined) s.paused = !!paused;
   if (dailyLimit !== undefined) {
     const n = Number(dailyLimit);
@@ -47,10 +63,40 @@ router.put('/settings', async (req, res) => {
   res.json(await settingsView(req.userId));
 });
 
+// ---- connect a mailbox with a Gmail App Password (no Google Cloud needed) ----
+router.post('/connect/apppassword', async (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const password = String(req.body.password || '').replace(/\s+/g, ''); // Google shows the password in groups of 4
+  if (!isEmail(email)) return res.status(400).json({ error: 'enter your Gmail address' });
+  if (password.length < 8) return res.status(400).json({ error: 'enter the 16-character App Password' });
+  try {
+    await verifyAppPassword(email, password); // proves it works for reading and sending before we save anything
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+  await User.updateOne({ _id: req.userId }, { mailbox: { email, passwordEnc: encrypt(password) }, $unset: { google: 1 } });
+  const s = await getSettings(req.userId);
+  s.lastUid = null; // the next look at the inbox just notes where it is: old mail is never acted on
+  await s.save();
+  await logActivity(req.userId, `Connected ${email}.`, 'info');
+  await syncInbox(req.userId);
+  res.json(await settingsView(req.userId));
+});
+
+router.post('/disconnect', async (req, res) => {
+  await User.updateOne({ _id: req.userId }, { $unset: { mailbox: 1, google: 1 } });
+  const s = await getSettings(req.userId);
+  s.mode = 'dryrun';
+  s.lastUid = null;
+  await s.save();
+  await logActivity(req.userId, 'Disconnected the email account. Back to test mode.', 'warn');
+  res.json(await settingsView(req.userId));
+});
+
 // ---- contacts ----
 const contactView = (c) => ({
   id: c.id, name: c.name, email: c.email, company: c.company, notes: c.notes,
-  status: c.status, statusAt: c.statusAt, optedOut: c.optedOut,
+  status: c.status, statusAt: c.statusAt, optedOut: c.optedOut, lastRepliedAt: c.lastRepliedAt || null,
 });
 
 router.get('/contacts', async (req, res) => {
@@ -164,9 +210,44 @@ router.delete('/rules/:id', async (req, res) => {
 router.get('/log', async (req, res) => {
   const logs = await EmailLog.find({ userId: req.userId }).sort({ _id: -1 }).limit(100).populate('ruleId', 'name');
   res.json(logs.map((l) => ({
-    id: l.id, to: l.to, subject: l.subject, body: l.body, outcome: l.outcome, error: l.error,
+    id: l.id, to: l.to, subject: l.subject, body: l.body, outcome: l.outcome, error: l.error, reason: l.reason,
     source: l.source, rule: l.ruleId?.name || null, at: l.createdAt,
   })));
+});
+
+// ---- the inbox: what the agent made of the replies it read ----
+const inboxView = (m) => ({
+  id: m.id, fromEmail: m.fromEmail, fromName: m.fromName, subject: m.subject, text: m.text, date: m.date,
+  category: m.category, outcome: m.outcome, reason: m.reason, draft: m.draft?.body ? { subject: m.draft.subject, body: m.draft.body } : null,
+});
+
+router.get('/inbox', async (req, res) => {
+  const items = await InboxMessage.find({ userId: req.userId, category: { $ne: 'ignored' }, outcome: { $ne: 'ignored' } }).sort({ date: -1 }).limit(50);
+  const ignored = await InboxMessage.countDocuments({ userId: req.userId, outcome: 'ignored' });
+  res.json({ items: items.map(inboxView), ignored });
+});
+
+router.post('/inbox/sync', async (req, res) => {
+  await syncInbox(req.userId);
+  res.json({ ok: true });
+});
+
+router.post('/inbox/:id/send', async (req, res) => {
+  if (!validId(req.params.id)) return res.status(404).json({ error: 'not found' });
+  const result = await sendDraft(req.userId, req.params.id, { subject: req.body.subject, body: req.body.body });
+  res.status(result.error ? 400 : 200).json(result);
+});
+
+router.post('/inbox/:id/dismiss', async (req, res) => {
+  if (!validId(req.params.id)) return res.status(404).json({ error: 'not found' });
+  const result = await dismissDraft(req.userId, req.params.id);
+  res.status(result.error ? 404 : 200).json(result);
+});
+
+// ---- what the agent has been doing (also pushed live over the socket) ----
+router.get('/activity', async (req, res) => {
+  const events = await AgentEvent.find({ userId: req.userId }).sort({ _id: -1 }).limit(80);
+  res.json(events.map((e) => ({ id: e.id, kind: e.kind, text: e.text, at: e.createdAt })));
 });
 
 // A failed email is forgotten, so the next check tries that person again.
@@ -178,7 +259,10 @@ router.post('/log/:id/retry', async (req, res) => {
 });
 
 // "Check now" instead of waiting for the next minute
-router.post('/run-now', async (req, res) => res.json(await runForUser(req.userId)));
+router.post('/run-now', async (req, res) => {
+  await syncInbox(req.userId); // read replies first, so someone who just answered is not followed up
+  res.json(await runForUser(req.userId));
+});
 
 // ---- talk to the agent ----
 router.get('/chat', async (req, res) => {
