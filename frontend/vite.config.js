@@ -10,6 +10,7 @@ export default defineConfig({
       '/auth': 'http://localhost:5000',
       '/business': 'http://localhost:5000',
       '/public': 'http://localhost:5000',
+      '/socket.io': { target: 'http://localhost:5000', ws: true }, // live order updates
     },
   },
 });
