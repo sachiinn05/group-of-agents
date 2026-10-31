@@ -12,6 +12,12 @@ export const User = model(
       email: String,
       refreshToken: String,
     },
+    // Gmail connected with an App Password (no Google Cloud needed). One password lets the agent send over SMTP
+    // and read the inbox over IMAP. Stored encrypted (see secrets.js).
+    mailbox: {
+      email: String,
+      passwordEnc: String,
+    },
   })
 );
 
@@ -198,6 +204,14 @@ export const EmailSettings = model(
     dailyLimit: { type: Number, default: 30, min: 1, max: 400 }, // real emails per rolling 24 hours
     senderName: { type: String, default: '' },
     signature: { type: String, default: '' }, // added under every email the agent writes
+    // How the agent writes like the user
+    about: { type: String, default: '' }, // who the user is, so emails are specific: "Fresher software developer..."
+    tone: { type: String, enum: ['friendly', 'formal', 'short'], default: 'friendly' },
+    styleSample: { type: String, default: '' }, // the user's own emails, to copy the voice (not the sentences)
+    // Reading the inbox. off = ignore it. draft = understand replies and prepare answers for the user to approve.
+    // auto = also send the safe ones (thanks, simple questions) by itself.
+    inboxMode: { type: String, enum: ['off', 'draft', 'auto'], default: 'draft' },
+    lastUid: { type: Number, default: null }, // the newest inbox message already looked at
   })
 );
 
@@ -214,6 +228,7 @@ export const Contact = model(
       status: { type: String, default: 'new' }, // lower case
       statusAt: { type: Date, default: Date.now }, // when the status last changed
       optedOut: { type: Boolean, default: false }, // never email this person automatically
+      lastRepliedAt: Date, // the last time they wrote back (found in the inbox)
     },
     { timestamps: true }
   ).index({ userId: 1, email: 1 }, { unique: true })
@@ -251,7 +266,9 @@ export const EmailLog = model(
       userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
       ruleId: { type: Schema.Types.ObjectId, ref: 'Rule' },
       contactId: { type: Schema.Types.ObjectId, ref: 'Contact' },
-      source: { type: String, enum: ['rule', 'chat'], default: 'rule' },
+      source: { type: String, enum: ['rule', 'chat', 'inbox'], default: 'rule' },
+      reason: String, // why the agent wrote this email, in one line
+      messageId: String, // the email's Message-ID, so a reply to it can be recognised
       to: { type: String, required: true },
       subject: { type: String, default: '' },
       body: { type: String, default: '' },
@@ -261,6 +278,43 @@ export const EmailLog = model(
     },
     { timestamps: true }
   ).index({ ruleId: 1, contactId: 1, dedupeKey: 1 }, { unique: true, partialFilterExpression: { ruleId: { $type: 'objectId' } } })
+);
+
+// An email that arrived in the user's inbox, and what the agent made of it.
+export const InboxMessage = model(
+  'InboxMessage',
+  new Schema(
+    {
+      userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+      uid: { type: Number, required: true }, // the inbox's own number for the message
+      messageId: String,
+      references: [String], // earlier Message-IDs in the conversation, needed to reply in the same thread
+      fromEmail: { type: String, required: true },
+      fromName: String,
+      subject: String,
+      text: String,
+      date: Date,
+      contactId: { type: Schema.Types.ObjectId, ref: 'Contact' },
+      category: String, // interested, rejected, question, scheduling, out_of_office, unsubscribe, thanks, other, ignored
+      // replied = the agent answered. needs_you = a draft waits for approval. noted = understood, nothing to send.
+      // ignored = automated mail or not from a known contact. dismissed / sent = the owner dealt with the draft.
+      outcome: { type: String, enum: ['replied', 'needs_you', 'noted', 'ignored', 'dismissed', 'sent', 'failed'], required: true },
+      reason: String, // why the agent did what it did
+      draft: { subject: String, body: String },
+    },
+    { timestamps: true }
+  ).index({ userId: 1, uid: 1 }, { unique: true })
+);
+
+// What the agent is doing, shown live to the user. Forgotten after a week.
+export const AgentEvent = model(
+  'AgentEvent',
+  new Schema({
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    kind: { type: String, default: 'info' }, // info, write, send, read, decide, warn, error
+    text: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now, expires: 60 * 60 * 24 * 7 },
+  })
 );
 
 // The owner's conversation with the Email Agent.
