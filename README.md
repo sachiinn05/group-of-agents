@@ -45,6 +45,28 @@ cd frontend && npm install && npm run dev             # UI (Vite prints the addr
 
 `backend/.env` needs `GROQ_API_KEY`, `JWT_SECRET`, `MONGO_URI`. Never commit it.
 
+## Features at a glance
+
+- **Customer page** (`/shop/<slug>`): Chat, Menu, Cart, Orders. Hindi and English switch. Live order status over sockets. Offers bar.
+- **Owner dashboard:** My shop, Products, Orders, Leads, Chats. New orders, leads and messages appear instantly, with unread counts.
+- **Offers and announcements** with an optional end date. The page shows them and the agent mentions them.
+- **Chats:** the owner reads every customer conversation and can write back from the dashboard. The customer sees it live.
+- **Unanswered questions:** things customers asked that the agent could not answer, or items the shop does not stock, counted so the owner knows what to add.
+- **QR code and poster** for the counter, and a **website chat widget** (one script line, see below).
+- **Telegram alerts** for orders and callbacks. The owner can answer a customer by replying to the alert.
+
+## Website chat widget
+
+In the dashboard open My shop and copy the line under "Chat widget". It looks like this:
+
+```html
+<script src="https://YOUR-APP/widget.js" data-shop="your-shop-slug" async></script>
+```
+
+A chat button appears in the corner of the shop's website and opens the shop page in a panel.
+`data-color="#e91e63"` changes the button colour. The app must be served over HTTPS and must not forbid
+being framed (do not send `X-Frame-Options: DENY`) for the widget to work on other sites.
+
 ## Order alerts on Telegram (optional)
 
 1. In Telegram, open **@BotFather**, send `/newbot`, pick a name, and copy the token it gives you.
@@ -52,6 +74,7 @@ cd frontend && npm install && npm run dev             # UI (Vite prints the addr
 3. In the dashboard, an owner clicks **Connect Telegram**, taps **Start** in the chat that opens, and is linked.
 
 From then on, each new order or callback request is sent to the owner's Telegram at once.
+Reply to an alert in Telegram to write to that customer; your reply shows in their chat at once.
 The owner can send `/stop` to the bot to turn alerts off.
 
 ## API
