@@ -1,15 +1,17 @@
 import { Router } from 'express';
-import { Business, Lead, PublicMessage } from './db.js';
+import mongoose from 'mongoose';
+import { Business, Order, PublicMessage } from './db.js';
 import { findKnowledge } from './knowledge.js';
 import { shopPrompt } from './shopPrompt.js';
 import { runToolLoop } from './toolLoop.js';
-import { notifyLead } from './telegram.js';
+import { TOOLS, executeTool, shortId, upiLink } from './shopTools.js';
 
 // Customer-facing routes. No login: anyone with the shop link can chat.
 const router = Router();
 
 const MAX_MESSAGE = 1000;
 const HISTORY = 8;
+const SESSION_RE = /^[\w-]{8,64}$/;
 
 // Light per-IP limit so the shop link can't be used to burn the LLM quota.
 const hits = new Map();
@@ -21,48 +23,18 @@ function rateLimited(ip) {
   return recent.length > 20;
 }
 
-const saveLeadTool = {
-  type: 'function',
-  function: {
-    name: 'save_lead',
-    description:
-      'Save a customer who wants to order, reserve, or get a callback, so the owner can contact them. Needs a phone number.',
-    parameters: {
-      type: 'object',
-      // Types allow null: the model sometimes calls this before it has the phone number, and the
-      // provider would reject the whole request. saveLead() checks the phone and tells the model to ask.
-      properties: {
-        name: { type: ['string', 'null'], description: 'Customer name' },
-        phone: { type: ['string', 'null'], description: 'Customer phone number. Never guess it.' },
-        note: { type: 'string', description: 'What they want: item, quantity, delivery address, question to check' },
-      },
-      required: ['note'],
-    },
-  },
-};
-
-async function saveLead(business, sessionId, args, state) {
-  const phone = String(args.phone || '').replace(/[^\d+]/g, '');
-  const digits = phone.replace(/\D/g, '');
-  if (digits.length < 8 || digits.length > 15) {
-    return JSON.stringify({ error: 'That phone number looks invalid. Ask the customer for a valid number.' });
-  }
-  const fields = { name: String(args.name || '').trim(), note: String(args.note || '').trim() };
-  // Same customer in the same chat: update instead of creating duplicates.
-  const existing = await Lead.findOne({ businessId: business._id, sessionId, phone });
-  if (existing) {
-    await Lead.updateOne({ _id: existing._id }, fields);
-    // Alert again only if the order details actually changed.
-    if (fields.note !== existing.note) {
-      notifyLead(business, { phone, name: fields.name || existing.name, note: fields.note }, { updated: true });
-    }
-  } else {
-    await Lead.create({ businessId: business._id, sessionId, phone, ...fields });
-    notifyLead(business, { phone, ...fields });
-  }
-  state.leadSaved = true;
-  return JSON.stringify({ ok: true, message: 'Saved. The owner will contact the customer.' });
-}
+// What a customer may see about their own order.
+const customerOrder = (business, o) => ({
+  id: o.id,
+  number: shortId(o),
+  status: o.status,
+  total: o.total,
+  fulfilment: o.fulfilment,
+  items: o.items.map((i) => ({ name: i.name, unit: i.unit, qty: i.qty })),
+  payUrl: ['pending', 'accepted', 'out_for_delivery'].includes(o.status) ? upiLink(business, o) : null,
+  feedback: o.feedback?.rating ? { rating: o.feedback.rating, comment: o.feedback.comment } : null,
+  createdAt: o.createdAt,
+});
 
 // Public details for the chat page header
 router.get('/:slug', async (req, res) => {
@@ -75,9 +47,34 @@ router.get('/:slug', async (req, res) => {
 router.get('/:slug/history', async (req, res) => {
   const business = await Business.findOne({ slug: req.params.slug });
   const sessionId = String(req.query.sessionId || '');
-  if (!business || !/^[\w-]{8,64}$/.test(sessionId)) return res.json([]);
+  if (!business || !SESSION_RE.test(sessionId)) return res.json([]);
   const messages = await PublicMessage.find({ businessId: business._id, sessionId }).sort({ _id: 1 }).limit(100);
   res.json(messages.map((m) => ({ role: m.role, content: m.content })));
+});
+
+// This customer's orders (found by their session), with status
+router.get('/:slug/orders', async (req, res) => {
+  const business = await Business.findOne({ slug: req.params.slug });
+  const sessionId = String(req.query.sessionId || '');
+  if (!business || !SESSION_RE.test(sessionId)) return res.json([]);
+  const orders = await Order.find({ businessId: business._id, sessionId }).sort({ _id: -1 }).limit(10);
+  res.json(orders.map((o) => customerOrder(business, o)));
+});
+
+// Rating after delivery
+router.post('/:slug/orders/:id/feedback', async (req, res) => {
+  const business = await Business.findOne({ slug: req.params.slug });
+  const sessionId = String(req.body.sessionId || '');
+  const rating = Number(req.body.rating);
+  if (!business || !SESSION_RE.test(sessionId) || !mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'not found' });
+  if (!Number.isInteger(rating) || rating < 1 || rating > 5) return res.status(400).json({ error: 'rating must be 1 to 5' });
+  const order = await Order.findOne({ _id: req.params.id, businessId: business._id, sessionId });
+  if (!order) return res.status(404).json({ error: 'not found' });
+  if (order.status !== 'delivered') return res.status(400).json({ error: 'You can rate an order after it is delivered.' });
+  if (order.feedback?.rating) return res.status(409).json({ error: 'Already rated. Thank you!' });
+  order.feedback = { rating, comment: String(req.body.comment || '').trim().slice(0, 300) };
+  await order.save();
+  res.json({ ok: true });
 });
 
 router.post('/:slug/chat', async (req, res) => {
@@ -90,7 +87,7 @@ router.post('/:slug/chat', async (req, res) => {
   const sessionId = String(req.body.sessionId || '');
   if (!message) return res.status(400).json({ error: 'message required' });
   if (message.length > MAX_MESSAGE) return res.status(400).json({ error: `Message is too long (max ${MAX_MESSAGE} characters).` });
-  if (!/^[\w-]{8,64}$/.test(sessionId)) return res.status(400).json({ error: 'invalid sessionId' });
+  if (!SESSION_RE.test(sessionId)) return res.status(400).json({ error: 'invalid sessionId' });
 
   await PublicMessage.create({ businessId: business._id, sessionId, role: 'user', content: message });
   const recent = await PublicMessage.find({ businessId: business._id, sessionId }).sort({ _id: -1 }).limit(HISTORY);
@@ -98,21 +95,18 @@ router.post('/:slug/chat', async (req, res) => {
 
   // Search the owner's documents using the last two things the customer said.
   const query = history.filter((m) => m.role === 'user').slice(-2).map((m) => m.content).join(' ');
-  const state = { leadSaved: false };
+  const state = { leadSaved: false, orders: [] };
   try {
     const knowledge = await findKnowledge(business._id, query);
     const reply =
       (await runToolLoop({
         systemPrompt: shopPrompt(business, knowledge),
         history,
-        tools: [saveLeadTool],
-        execute: (name, args) =>
-          name === 'save_lead'
-            ? saveLead(business, sessionId, args, state)
-            : JSON.stringify({ error: `Unknown tool ${name}` }),
+        tools: TOOLS,
+        execute: (name, args) => executeTool(name, args, { business, sessionId, state }),
       })) || 'Sorry, I could not answer that. Please try again.';
     await PublicMessage.create({ businessId: business._id, sessionId, role: 'assistant', content: reply });
-    res.json({ reply, leadSaved: state.leadSaved });
+    res.json({ reply, leadSaved: state.leadSaved, orders: state.orders });
   } catch (e) {
     console.error('public chat failed:', e.message);
     const busy = e.status === 429;
