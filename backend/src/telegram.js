@@ -1,4 +1,5 @@
 import { Business } from './db.js';
+import { MODES } from './profiles.js';
 
 // Instant alerts to the shop owner on Telegram. Needs TELEGRAM_BOT_TOKEN (create a bot with @BotFather).
 // Without it the app still works; owners just check the leads list.
@@ -80,7 +81,7 @@ export async function notifyOrder(business, order) {
   const lines = [
     `🛍 New order #${String(order._id).slice(-6).toUpperCase()} - ${business.name}`,
     `${order.customerName || 'Customer'} · ${order.phone}`,
-    order.fulfilment === 'pickup' ? 'Pickup from shop' : `Deliver to: ${order.address}`,
+    order.fulfilment === 'delivery' ? `Deliver to: ${order.address}` : `${MODES[order.fulfilment] || order.fulfilment}${order.schedule ? `: ${order.schedule}` : ''}`,
     ...order.items.map((i) => `- ${i.qty} x ${i.name}${i.unit ? ` (${i.unit})` : ''} = ${rupees(i.price * i.qty)}`),
     `Total: ${rupees(order.total)}`,
     order.note ? `Note: ${order.note}` : '',

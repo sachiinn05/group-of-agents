@@ -5,6 +5,7 @@ import { findKnowledge } from './knowledge.js';
 import { shopPrompt } from './shopPrompt.js';
 import { runToolLoop } from './toolLoop.js';
 import { TOOLS, executeTool, placeOrder, isAvailable, customerOrder } from './shopTools.js';
+import { MODES, profileFor, modesFor, typeLabelFor } from './profiles.js';
 
 // Customer-facing routes. No login: anyone with the shop link can chat.
 const router = Router();
@@ -55,10 +56,22 @@ router.get('/:slug/products', async (req, res) => {
   const business = await Business.findOne({ slug: req.params.slug });
   if (!business) return res.status(404).json({ error: 'shop not found' });
   const products = await Product.find({ businessId: business._id }).sort({ name: 1 }).limit(500);
+  const profile = profileFor(business.type);
   res.json({
     upi: !!business.info?.upiId,
     deliveryAreas: business.deliveryAreas || [],
-    products: products.map((p) => ({ id: p.id, name: p.name, unit: p.unit, price: p.price, available: isAvailable(p) })),
+    menuLabel: profile.menuLabel, // the browse tab's name: Menu, Products, Medicines, Services
+    kind: typeLabelFor(business),
+    modes: modesFor(business).map((key) => ({ key, label: MODES[key] })),
+    products: products.map((p) => ({
+      id: p.id,
+      name: p.name,
+      unit: p.unit,
+      price: p.price,
+      category: p.category,
+      note: p.note,
+      available: isAvailable(p),
+    })),
   });
 });
 

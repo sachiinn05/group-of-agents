@@ -16,6 +16,7 @@ const view = (o) => ({
   phone: o.phone,
   fulfilment: o.fulfilment,
   address: o.address,
+  schedule: o.schedule || '',
   note: o.note,
   items: o.items.map((i) => ({ name: i.name, unit: i.unit, price: i.price, qty: i.qty })),
   total: o.total,
