@@ -7,6 +7,11 @@ export const User = model(
   new Schema({
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
+    // Set when the user connects Gmail (Email Agent). The refresh token lets us send on their behalf.
+    google: {
+      email: String,
+      refreshToken: String,
+    },
   })
 );
 
@@ -174,6 +179,98 @@ export const Order = model(
       status: { type: String, enum: ORDER_STATUSES, default: 'pending' },
       stockDeducted: { type: Boolean, default: false },
       feedback: { rating: Number, comment: String },
+    },
+    { timestamps: true }
+  )
+);
+
+// ---------------------------------------------------------------------------------------------
+// Email Agent: sends emails by itself when a "situation" (rule) becomes true for a contact.
+// ---------------------------------------------------------------------------------------------
+
+export const EmailSettings = model(
+  'EmailSettings',
+  new Schema({
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
+    // dryrun = write the emails and log them, but do not send. live = really send. Starts as dryrun for safety.
+    mode: { type: String, enum: ['dryrun', 'live'], default: 'dryrun' },
+    paused: { type: Boolean, default: false }, // the big stop button
+    dailyLimit: { type: Number, default: 30, min: 1, max: 400 }, // real emails per rolling 24 hours
+    senderName: { type: String, default: '' },
+    signature: { type: String, default: '' }, // added under every email the agent writes
+  })
+);
+
+// A person the agent may email. `status` drives the situations ("applied", "interview", "customer"...).
+export const Contact = model(
+  'Contact',
+  new Schema(
+    {
+      userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+      name: { type: String, default: '' },
+      email: { type: String, required: true }, // lower case
+      company: { type: String, default: '' },
+      notes: { type: String, default: '' }, // anything the agent should know when writing to them
+      status: { type: String, default: 'new' }, // lower case
+      statusAt: { type: Date, default: Date.now }, // when the status last changed
+      optedOut: { type: Boolean, default: false }, // never email this person automatically
+    },
+    { timestamps: true }
+  ).index({ userId: 1, email: 1 }, { unique: true })
+);
+
+// A situation and what to do about it.
+//   contact_added    -> when a contact is added
+//   status_changed   -> the moment a contact's status becomes `status`
+//   status_for_days  -> `days` days after a contact's status became `status`, if it is still that
+export const TRIGGERS = ['contact_added', 'status_changed', 'status_for_days'];
+export const Rule = model(
+  'Rule',
+  new Schema(
+    {
+      userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+      name: { type: String, required: true },
+      enabled: { type: Boolean, default: true },
+      trigger: {
+        type: { type: String, enum: TRIGGERS, required: true },
+        status: { type: String, default: '' },
+        days: { type: Number, default: 0 },
+      },
+      instructions: { type: String, required: true }, // what the email should say, in plain words
+    },
+    { timestamps: true }
+  )
+);
+
+// Every email the agent wrote, sent or not. The unique key below is what stops the same situation
+// from emailing the same person twice, even if two checks overlap.
+export const EmailLog = model(
+  'EmailLog',
+  new Schema(
+    {
+      userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+      ruleId: { type: Schema.Types.ObjectId, ref: 'Rule' },
+      contactId: { type: Schema.Types.ObjectId, ref: 'Contact' },
+      source: { type: String, enum: ['rule', 'chat'], default: 'rule' },
+      to: { type: String, required: true },
+      subject: { type: String, default: '' },
+      body: { type: String, default: '' },
+      outcome: { type: String, enum: ['sending', 'sent', 'dry_run', 'failed', 'skipped'], required: true },
+      error: String,
+      dedupeKey: String,
+    },
+    { timestamps: true }
+  ).index({ ruleId: 1, contactId: 1, dedupeKey: 1 }, { unique: true, partialFilterExpression: { ruleId: { $type: 'objectId' } } })
+);
+
+// The owner's conversation with the Email Agent.
+export const EmailChatMessage = model(
+  'EmailChatMessage',
+  new Schema(
+    {
+      userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+      role: { type: String, enum: ['user', 'assistant'], required: true },
+      content: { type: String, required: true },
     },
     { timestamps: true }
   )
