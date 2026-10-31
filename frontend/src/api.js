@@ -30,8 +30,18 @@ export const login = (email, password) => request('/auth/login', { body: { email
 export const signup = (email, password) => request('/auth/signup', { body: { email, password } });
 
 export const getBusiness = () => request('/business');
-export const createBusiness = (name, info) => request('/business', { body: { name, info } });
-export const updateBusiness = (name, info) => request('/business', { method: 'PUT', body: { name, info } });
+export const createBusiness = (name, info, deliveryAreas) => request('/business', { body: { name, info, deliveryAreas } });
+export const updateBusiness = (name, info, deliveryAreas) =>
+  request('/business', { method: 'PUT', body: { name, info, deliveryAreas } });
+
+export const getProducts = () => request('/business/products');
+export const addProduct = (product) => request('/business/products', { body: product });
+export const bulkAddProducts = (text) => request('/business/products/bulk', { body: { text } });
+export const updateProduct = (id, fields) => request(`/business/products/${id}`, { method: 'PATCH', body: fields });
+export const deleteProduct = (id) => request(`/business/products/${id}`, { method: 'DELETE' });
+
+export const getOrders = () => request('/business/orders');
+export const setOrderStatus = (id, status) => request(`/business/orders/${id}`, { method: 'PATCH', body: { status } });
 
 export function uploadDocuments(files) {
   const form = new FormData();
@@ -51,5 +61,8 @@ export const setLeadStatus = (id, status) => request(`/business/leads/${id}`, { 
 // ---- customer (no login) ----
 export const getShop = (slug) => request(`/public/${slug}`);
 export const getShopHistory = (slug, sessionId) => request(`/public/${slug}/history?sessionId=${sessionId}`);
+export const getShopOrders = (slug, sessionId) => request(`/public/${slug}/orders?sessionId=${sessionId}`);
+export const rateOrder = (slug, sessionId, orderId, rating, comment) =>
+  request(`/public/${slug}/orders/${orderId}/feedback`, { body: { sessionId, rating, comment } });
 export const sendShopMessage = (slug, sessionId, message) =>
   request(`/public/${slug}/chat`, { body: { sessionId, message } });
