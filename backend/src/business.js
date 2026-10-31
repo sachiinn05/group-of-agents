@@ -12,7 +12,11 @@ router.use(requireAuth);
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 5 } });
 
-const INFO_FIELDS = ['address', 'phone', 'timings', 'delivery', 'payments', 'policies'];
+const INFO_FIELDS = ['address', 'phone', 'timings', 'delivery', 'payments', 'policies', 'upiId'];
+
+// "Rajendra Nagar, 800016" or one per line -> ['rajendra nagar', '800016']
+const parseAreas = (text) =>
+  [...new Set(String(text || '').split(/[,\n]/).map((a) => a.trim().toLowerCase()).filter(Boolean))].slice(0, 100);
 const pickInfo = (body = {}) =>
   Object.fromEntries(INFO_FIELDS.filter((k) => typeof body[k] === 'string').map((k) => [k, body[k].trim()]));
 
@@ -36,6 +40,7 @@ router.get('/', async (req, res) => {
     slug: business.slug,
     type: business.type,
     info: business.info,
+    deliveryAreas: business.deliveryAreas,
     documents: documents.map((d) => ({ id: d.id, filename: d.filename })),
   });
 });
@@ -50,6 +55,7 @@ router.post('/', async (req, res) => {
     name,
     slug: await makeSlug(name),
     info: pickInfo(req.body.info),
+    deliveryAreas: parseAreas(req.body.deliveryAreas),
   });
   res.status(201).json({ id: business.id, slug: business.slug });
 });
@@ -60,6 +66,7 @@ router.put('/', async (req, res) => {
   if (!business) return res.status(404).json({ error: 'no shop yet' });
   if (typeof req.body.name === 'string' && req.body.name.trim()) business.name = req.body.name.trim();
   business.info = { ...business.info.toObject(), ...pickInfo(req.body.info) };
+  if (typeof req.body.deliveryAreas === 'string') business.deliveryAreas = parseAreas(req.body.deliveryAreas);
   await business.save();
   res.json({ ok: true });
 });
