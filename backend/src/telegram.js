@@ -1,5 +1,6 @@
-import { Business } from './db.js';
+import { Business, TelegramThread } from './db.js';
 import { MODES } from './profiles.js';
+import { ownerReply } from './ownerReply.js';
 
 // Instant alerts to the shop owner on Telegram. Needs TELEGRAM_BOT_TOKEN (create a bot with @BotFather).
 // Without it the app still works; owners just check the leads list.
@@ -34,6 +35,17 @@ export async function handleUpdate(update) {
   if (!text) return;
   const chatId = String(update.message.chat.id);
   const [command, code] = text.trim().split(/\s+/);
+
+  // The owner replied to one of our alerts: pass it on to that customer.
+  const repliedTo = update.message.reply_to_message?.message_id;
+  if (repliedTo && !command.startsWith('/')) {
+    const thread = await TelegramThread.findOne({ chatId, messageId: repliedTo });
+    const business = thread && (await Business.findOne({ _id: thread.businessId, 'telegram.chatId': chatId }));
+    if (business) {
+      await ownerReply(business._id, thread.sessionId, text.trim().slice(0, 1000));
+      return sendTelegram(chatId, '✅ Sent to the customer.');
+    }
+  }
 
   if (command === '/start' && code) {
     const business = await Business.findOne({ 'telegram.linkCode': code });
@@ -86,11 +98,7 @@ export async function notifyOrder(business, order) {
     `Total: ${rupees(order.total)}`,
     order.note ? `Note: ${order.note}` : '',
   ].filter(Boolean);
-  try {
-    await sendTelegram(chatId, lines.join('\n'));
-  } catch (e) {
-    console.error('telegram order alert failed:', e.message);
-  }
+  await sendAlert(business, chatId, lines, order.sessionId);
 }
 
 // Tells the owner about a customer. Never throws: a failed alert must not break the customer's chat.
@@ -102,8 +110,18 @@ export async function notifyLead(business, lead, { updated = false } = {}) {
     `${lead.name || 'Customer'} · ${lead.phone}`,
     lead.note || '',
   ].filter(Boolean);
+  await sendAlert(business, chatId, lines, lead.sessionId);
+}
+
+// Sends an alert, and remembers which customer it was about. When the owner replies to this message in
+// Telegram, the reply goes to that customer's chat. Never throws: a failed alert must not break the customer's chat.
+async function sendAlert(business, chatId, lines, sessionId) {
   try {
-    await sendTelegram(chatId, lines.join('\n'));
+    const text = sessionId ? [...lines, '', '↩️ Reply to this message to write to the customer.'].join('\n') : lines.join('\n');
+    const sent = await sendTelegram(chatId, text);
+    if (sessionId && sent?.message_id) {
+      await TelegramThread.create({ businessId: business._id, chatId: String(chatId), messageId: sent.message_id, sessionId });
+    }
   } catch (e) {
     console.error('telegram alert failed:', e.message);
   }
