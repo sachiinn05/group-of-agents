@@ -9,11 +9,13 @@ const FIELDS = [
   ['delivery', 'Delivery', 'Free home delivery within 3 km on orders above Rs 300'],
   ['payments', 'Payment methods', 'Cash, UPI'],
   ['policies', 'Policies (returns, etc.)', 'No returns on opened food items'],
+  ['upiId', 'UPI ID (customers get a Pay button)', 'sharmastore@okicici'],
 ];
 
 export default function ShopSetup({ business, onChanged }) {
   const [name, setName] = useState(business?.name || '');
   const [info, setInfo] = useState(business?.info || {});
+  const [areas, setAreas] = useState((business?.deliveryAreas || []).join(', '));
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
@@ -28,7 +30,7 @@ export default function ShopSetup({ business, onChanged }) {
     setMessage('');
     setSaving(true);
     try {
-      await (business ? updateBusiness(name, info) : createBusiness(name, info));
+      await (business ? updateBusiness(name, info, areas) : createBusiness(name, info, areas));
       setMessage(business ? 'Saved.' : 'Your agent is ready. Now upload your price list below.');
       await onChanged();
     } catch (err) {
@@ -98,6 +100,10 @@ export default function ShopSetup({ business, onChanged }) {
             />
           </label>
         ))}
+        <label>
+          Areas you deliver to (comma separated; leave empty to deliver anywhere)
+          <input value={areas} onChange={(e) => setAreas(e.target.value)} placeholder="Rajendra Nagar, Boring Road, 800016" />
+        </label>
         <button className="btn" disabled={saving}>{saving ? 'Saving...' : business ? 'Save' : 'Create my shop agent'}</button>
       </form>
 
