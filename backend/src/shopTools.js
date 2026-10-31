@@ -62,6 +62,39 @@ export const TOOLS = [
   },
   {
     type: 'function',
+    function: {
+      name: 'update_cart',
+      description: "Set quantities in the customer's cart (see CURRENT CART). qty REPLACES the quantity; 0 removes the item. Safe to repeat. The customer reviews and places the order in the Cart tab.",
+      parameters: {
+        type: 'object',
+        properties: {
+          items: {
+            type: 'array',
+            description: 'qty is the number of units as listed: for a product listed "1 kg", 2 kg is qty 2',
+            items: { type: 'object', properties: { product_id: { type: 'string' }, qty: { type: 'number' } }, required: ['product_id', 'qty'] },
+          },
+        },
+        required: ['items'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'save_customer_details',
+      description: 'Call as soon as the customer tells you their name, phone or delivery address, so the Cart form is filled in for them. Only pass what they actually said.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name: { type: ['string', 'null'] },
+          phone: { type: ['string', 'null'] },
+          address: { type: ['string', 'null'] },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
     function: { name: 'my_orders', description: "This customer's recent orders with status, for status questions or reordering.", parameters: { type: 'object', properties: {} } },
   },
   {
@@ -179,6 +212,56 @@ export async function placeOrder(business, sessionId, args, state) {
   };
 }
 
+// The cart lives in the customer's browser. This checks the items and hands the new quantities back in
+// state.cartUpdates, and the chat response carries them to the page. Quantities are absolute (not "add"),
+// so a repeated call by the model cannot double the cart.
+async function updateCart(business, args, state) {
+  const wanted = new Map();
+  for (const it of Array.isArray(args.items) ? args.items : []) {
+    const qty = Math.round(Number(it.qty) * 100) / 100;
+    if (!mongoose.isValidObjectId(it.product_id) || !(qty >= 0) || qty > 99) {
+      return { error: 'Each item needs a product_id from search_products and a quantity from 0 to 99.' };
+    }
+    wanted.set(String(it.product_id), qty);
+  }
+  if (wanted.size === 0 || wanted.size > 30) return { error: 'Change between 1 and 30 different products.' };
+
+  const products = await Product.find({ _id: { $in: [...wanted.keys()] }, businessId: business._id });
+  const byId = new Map(products.map((p) => [p.id, p]));
+  const changes = [];
+  for (const [id, qty] of wanted) {
+    const p = byId.get(id);
+    if (!p) return { error: 'Unknown product_id. Call search_products first and use its product_id.' };
+    if (qty > 0 && (!available(p) || (p.stockQty !== null && p.stockQty < qty))) {
+      return { error: `${p.name} is not available in that quantity${p.stockQty ? ` (only ${p.stockQty} left)` : ''}.` };
+    }
+    changes.push({ product_id: p.id, name: p.name, unit: p.unit, qty, price: p.price });
+  }
+  state.cartUpdates.push(...changes);
+  return {
+    ok: true,
+    cart_now: changes.map((c) => ({ name: c.name, unit: c.unit, qty: c.qty, line_total: Math.round(c.price * c.qty * 100) / 100 })),
+    message: 'Cart updated. Ask for any missing name, phone and delivery or pickup details, then tell the customer to open the Cart tab to review and place the order.',
+  };
+}
+
+function saveCustomerDetails(args, state) {
+  const details = {};
+  const name = String(args.name || '').trim().slice(0, 80);
+  const address = String(args.address || '').trim().slice(0, 300);
+  if (name) details.name = name;
+  if (address) details.address = address;
+  let note;
+  if (args.phone) {
+    const phone = validPhone(args.phone);
+    if (phone) details.phone = phone;
+    else note = 'That phone number looks invalid and was not saved. Ask for a valid one.';
+  }
+  if (Object.keys(details).length === 0) return { error: note || 'Nothing to save.' };
+  state.profile = { ...state.profile, ...details };
+  return { ok: true, saved: Object.keys(details), ...(note && { note }) };
+}
+
 async function myOrders(business, sessionId) {
   const orders = await Order.find({ businessId: business._id, sessionId }).sort({ _id: -1 }).limit(5);
   return {
@@ -218,6 +301,8 @@ export async function executeTool(name, args, ctx) {
     const result =
       name === 'search_products' ? await searchProducts(business, args)
       : name === 'place_order' ? await placeOrder(business, sessionId, args, state)
+      : name === 'update_cart' ? await updateCart(business, args, state)
+      : name === 'save_customer_details' ? saveCustomerDetails(args, state)
       : name === 'my_orders' ? await myOrders(business, sessionId)
       : name === 'save_lead' ? await saveLead(business, sessionId, args, state)
       : { error: `Unknown tool ${name}` };
