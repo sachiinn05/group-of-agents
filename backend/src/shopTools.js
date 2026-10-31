@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { Product, Order, Lead } from './db.js';
 import { tokenize } from './knowledge.js';
 import { notifyLead, notifyOrder } from './telegram.js';
+import { MODES, modesFor } from './profiles.js';
 
 // The actions the shop agent can take. The model decides when to call them; this file does the work,
 // and checks everything the model sends, because the model can be wrong.
@@ -25,6 +26,7 @@ export const customerOrder = (business, o) => ({
   status: o.status,
   total: o.total,
   fulfilment: o.fulfilment,
+  schedule: o.schedule || '',
   items: o.items.map((i) => ({ name: i.name, unit: i.unit, qty: i.qty })),
   payUrl: ['pending', 'accepted', 'out_for_delivery'].includes(o.status) ? upiLink(business, o) : null,
   feedback: o.feedback?.rating ? { rating: o.feedback.rating, comment: o.feedback.comment } : null,
@@ -63,10 +65,11 @@ export const TOOLS = [
             description: 'qty is the number of units as listed: for a product listed "1 kg", 2 kg is qty 2',
             items: { type: 'object', properties: { product_id: { type: 'string' }, qty: { type: 'number' } }, required: ['product_id', 'qty'] },
           },
-          fulfilment: { type: 'string', enum: ['delivery', 'pickup'] },
+          fulfilment: { type: 'string', enum: Object.keys(MODES), description: 'One of the ways listed in SHOP INFO' },
           name: { type: ['string', 'null'] },
           phone: { type: ['string', 'null'], description: 'Never guess it' },
           address: { type: ['string', 'null'], description: 'Required for delivery' },
+          schedule: { type: ['string', 'null'], description: 'Appointment date and time (required), dine-in table or arrival time, or pickup time' },
           note: { type: ['string', 'null'] },
         },
         required: ['items', 'fulfilment'],
@@ -153,6 +156,8 @@ async function searchProducts(business, args) {
       name: p.name,
       unit: p.unit,
       price: p.price,
+      ...(p.category && { category: p.category }),
+      ...(p.note && { note: p.note }),
       available: available(p),
       ...(p.stockQty !== null && p.stockQty > 0 && p.stockQty <= 10 && { only_left: p.stockQty }),
     })),
@@ -161,18 +166,26 @@ async function searchProducts(business, args) {
 }
 
 export async function placeOrder(business, sessionId, args, state) {
-  const fulfilment = args.fulfilment === 'pickup' ? 'pickup' : 'delivery';
+  const modes = modesFor(business);
+  const fulfilment = args.fulfilment ? args.fulfilment : modes[0];
+  if (!modes.includes(fulfilment)) {
+    return { error: `This shop takes orders by: ${modes.map((m) => MODES[m]).join(', ')}.` };
+  }
   const phone = validPhone(args.phone);
   if (!phone) return { error: 'Please enter a valid phone number.' };
 
   const address = String(args.address || '').trim();
+  const schedule = String(args.schedule || '').trim().slice(0, 100);
   if (fulfilment === 'delivery') {
-    if (address.length < 5) return { error: 'Please enter the full delivery address, or choose pickup.' };
+    const orPickup = modes.includes('pickup') ? ', or choose pickup' : '';
+    if (address.length < 5) return { error: `Please enter the full delivery address${orPickup}.` };
     const areas = business.deliveryAreas || [];
     if (areas.length && !areas.some((a) => address.toLowerCase().includes(a))) {
-      return { error: `We do not deliver to that address. We deliver to: ${areas.join(', ')}. You can choose pickup instead.` };
+      return { error: `We do not deliver to that address. We deliver to: ${areas.join(', ')}.${orPickup ? ' You can choose pickup instead.' : ''}` };
     }
   }
+  if (fulfilment === 'appointment' && schedule.length < 3) return { error: 'Please choose your preferred date and time.' };
+  if (fulfilment === 'dinein' && !schedule) return { error: 'Please enter your table number or arrival time.' };
 
   const wanted = new Map(); // merge repeated products
   for (const it of Array.isArray(args.items) ? args.items : []) {
@@ -207,6 +220,7 @@ export async function placeOrder(business, sessionId, args, state) {
     phone,
     fulfilment,
     address: fulfilment === 'delivery' ? address.slice(0, 300) : '',
+    schedule,
     note: String(args.note || '').trim().slice(0, 300),
     items,
     total,
