@@ -67,5 +67,6 @@ export const placeCartOrder = (slug, sessionId, order) =>
 export const getShopOrders = (slug, sessionId) => request(`/public/${slug}/orders?sessionId=${sessionId}`);
 export const rateOrder = (slug, sessionId, orderId, rating, comment) =>
   request(`/public/${slug}/orders/${orderId}/feedback`, { body: { sessionId, rating, comment } });
-export const sendShopMessage = (slug, sessionId, message) =>
-  request(`/public/${slug}/chat`, { body: { sessionId, message } });
+// `cart` ({ productId: qty }) goes along so the agent knows what is already in it.
+export const sendShopMessage = (slug, sessionId, message, cart) =>
+  request(`/public/${slug}/chat`, { body: { sessionId, message, cart } });

@@ -24,6 +24,17 @@ const loadCart = (slug) => {
   }
 };
 
+// The Cart tab reads these when it opens, so what the customer told the agent fills the form.
+function saveCustomerDetails(profile) {
+  let saved = {};
+  try {
+    saved = JSON.parse(localStorage.getItem('shop_customer_details')) || {};
+  } catch {
+    // ignore a corrupted value
+  }
+  localStorage.setItem('shop_customer_details', JSON.stringify({ ...saved, ...profile }));
+}
+
 const isActive = (o) => ['pending', 'accepted', 'out_for_delivery'].includes(o.status);
 
 export default function ShopChat({ slug }) {
@@ -73,13 +84,21 @@ export default function ShopChat({ slug }) {
     });
   }
 
-  // Keep order status fresh while an order is open or the orders tab is showing.
+  // While an order is open (or the orders tab is showing) keep its status fresh, and pull in
+  // messages the shop owner caused (accepted, out for delivery...) so they show in the chat too.
+  const sendingRef = useRef(false);
+  sendingRef.current = sending;
   const hasActive = orders.some(isActive);
   useEffect(() => {
     if (!hasActive && view !== 'orders') return;
-    const timer = setInterval(loadOrders, 10000);
+    const timer = setInterval(async () => {
+      loadOrders();
+      if (sendingRef.current) return;
+      const saved = await getShopHistory(slug, sessionId).catch(() => null);
+      if (saved) setMessages((m) => (saved.length > m.length ? [...m, ...saved.slice(m.length)] : m));
+    }, 8000);
     return () => clearInterval(timer);
-  }, [hasActive, view, loadOrders]);
+  }, [hasActive, view, loadOrders, slug, sessionId]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' });
@@ -93,8 +112,19 @@ export default function ShopChat({ slug }) {
     setMessages((m) => [...m, { role: 'user', content: text }]);
     setSending(true);
     try {
-      const { reply, leadSaved, orders: placed } = await sendShopMessage(slug, sessionId, text);
-      setMessages((m) => [...m, { role: 'assistant', content: reply, leadSaved, placed }]);
+      const { reply, leadSaved, orders: placed, cartUpdates, profile } = await sendShopMessage(slug, sessionId, text, cart);
+
+      // The agent may have changed the cart or learned the customer's details: show them in the Cart tab.
+      if (cartUpdates?.length) {
+        setCart((c) => {
+          const next = { ...c };
+          for (const u of cartUpdates) (u.qty > 0 ? (next[u.product_id] = u.qty) : delete next[u.product_id]);
+          return next;
+        });
+      }
+      if (profile) saveCustomerDetails(profile);
+
+      setMessages((m) => [...m, { role: 'assistant', content: reply, leadSaved, placed, cartUpdates, profile }]);
       if (placed?.length) loadOrders();
     } catch (e) {
       setError(e.message);
@@ -156,6 +186,13 @@ export default function ShopChat({ slug }) {
               <div key={i} className={`msg ${m.role}`}>
                 {m.role === 'assistant' ? <Markdown>{m.content}</Markdown> : m.content}
                 {m.leadSaved && <div className="lead-ok">✓ Sent to the shop. They will contact you.</div>}
+                {m.cartUpdates?.length > 0 && (
+                  <div className="lead-ok">
+                    🛒 Cart updated: {m.cartUpdates.map((u) => (u.qty > 0 ? `${u.qty} × ${u.name}` : `removed ${u.name}`)).join(', ')}
+                    <div><button className="btn small" onClick={() => setView('cart')}>View cart</button></div>
+                  </div>
+                )}
+                {m.profile && <div className="lead-ok">✓ Your details are filled in on the Cart tab.</div>}
                 {m.placed?.map((o) => (
                   <div key={o.id} className="lead-ok">
                     ✓ Order #{o.shortId}: {rupees(o.total)}
