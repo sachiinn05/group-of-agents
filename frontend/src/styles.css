@@ -205,6 +205,12 @@ input:focus, textarea:focus { border-color: var(--accent); }
 .tag.sent { background: #1f3a2b; border-color: #2f6b49; }
 .tag.dry_run { background: #3a3320; border-color: #7a6a2a; }
 .tag.failed { background: #3a2020; border-color: #7a3a3a; }
+.stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; padding: 12px 16px 0; }
+.stat { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; display: grid; gap: 2px; }
+.stat strong { font-size: 20px; }
+.stat .late { color: var(--danger); }
+.stat .okc { color: var(--ok); }
+.due.late-card { border-color: #7a3a3a; }
 .feed { gap: 0; padding: 6px 14px; max-height: 65vh; overflow-y: auto; }
 .feed-row { display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; align-items: start; padding: 9px 0; border-bottom: 1px solid var(--border); }
 .feed-row:last-child { border-bottom: 0; }
