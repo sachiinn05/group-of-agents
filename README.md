@@ -25,6 +25,7 @@ After logging in, the user lands on a home screen and picks an agent. To add an 
 |---|---|
 | **Shop Agent** | Customer-facing assistant for a shop, restaurant, pharmacy, salon... (see below) |
 | **Email Agent** | Sends emails by itself, depending on the situation (see below) |
+| **Payment Reminder Agent** | Reminds people who owe you money, politely, until they pay (see below) |
 
 ## Email Agent
 
@@ -81,6 +82,27 @@ in production; if you change it, people must reconnect. Mail servers are Gmail's
 
 While the Google app is in "Testing", only the listed test users can connect, and the connection expires after 7 days.
 The scheduler runs inside the backend process, so the backend has to be running for time-based situations to fire.
+
+## Payment Reminder (Khata) Agent
+
+Add who owes you money, how much, and the due date. The agent reminds them by email, politely, until they pay.
+
+- **Schedule:** default is 1 day after the due date (gentle), 7 days (firm) and 15 days (final). You can change the days,
+  the tones, and add a heads-up before the due date (a negative day, like -2). At most one reminder per check, never two
+  within 2 days, and only between the sending hours you set (default 9 am to 8 pm).
+- **It stops** when you record the payment (full or part: a part payment asks only for the rest), when you mark the person
+  "stop reminding", when you pause them until a date ("promised to pay on Friday"), and when they **reply** (reminders pause for
+  3 days so you can read it; needs the App Password connection, see Email Agent).
+- **Money is never wrong:** the AI writes only the wording, with placeholders. The server fills in the exact amount, date and
+  days. If the AI writes a number, a link or a threat, or is unavailable (for example its free quota is used up), a plain
+  template is sent instead, so reminders keep working. Reminders never threaten.
+- **No email?** Many customers only have a phone number. The agent prepares the message and a **WhatsApp** link (free, you tap send).
+- **Catching up:** if the server was off for days, it sends only the latest step that applies, never a pile of old ones. After
+  the last step plus 30 days it stops and leaves it to you.
+- English or Hindi, your UPI id in every reminder, a log of every reminder, a live activity feed, and the same safeguards as the
+  Email Agent: it starts in **test mode**, has a daily limit and a pause switch.
+
+It sends from the Gmail account you connect in the Email Agent (Settings).
 
 ## Works for any kind of shop
 
