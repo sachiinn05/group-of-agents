@@ -12,6 +12,7 @@ const SESSION_RE = /^[\w-]{8,64}$/;
 const MAX_ROOMS_PER_SOCKET = 5;
 const customerRoom = (businessId, sessionId) => `customer:${businessId}:${sessionId}`;
 const ownerRoom = (businessId) => `owner:${businessId}`;
+const userRoom = (userId) => `user:${userId}`;
 
 let io;
 
@@ -24,6 +25,7 @@ export function initRealtime(httpServer) {
     if (token) {
       try {
         const { id } = jwt.verify(token, process.env.JWT_SECRET);
+        socket.join(userRoom(id)); // for agents that belong to the user (Email Agent)
         const business = await Business.findOne({ ownerId: id }, '_id');
         if (business) socket.join(ownerRoom(business._id));
       } catch {
@@ -48,6 +50,11 @@ export function initRealtime(httpServer) {
 // Sends an event to every open page of one customer session. Does nothing if nobody is listening.
 export function emitToCustomer(businessId, sessionId, event, payload) {
   io?.to(customerRoom(businessId, sessionId)).emit(event, payload);
+}
+
+// Sends an event, with data, to every open tab of one logged-in user.
+export function emitToUser(userId, event, payload) {
+  io?.to(userRoom(userId)).emit(event, payload);
 }
 
 // Tells the owner's open dashboards that something changed (orders, leads, chats...). They refetch.
