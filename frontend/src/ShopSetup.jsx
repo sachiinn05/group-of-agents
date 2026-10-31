@@ -1,6 +1,6 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Alerts from './Alerts.jsx';
-import { createBusiness, updateBusiness, uploadDocuments, deleteDocument } from './api.js';
+import { createBusiness, updateBusiness, uploadDocuments, deleteDocument, getBusinessTypes } from './api.js';
 
 const FIELDS = [
   ['address', 'Address', 'Shop 12, Rajendra Nagar, Patna'],
@@ -16,6 +16,10 @@ export default function ShopSetup({ business, onChanged }) {
   const [name, setName] = useState(business?.name || '');
   const [info, setInfo] = useState(business?.info || {});
   const [areas, setAreas] = useState((business?.deliveryAreas || []).join(', '));
+  const [type, setType] = useState(business?.type || 'general');
+  const [typeLabel, setTypeLabel] = useState(business?.typeLabel || '');
+  const [modes, setModes] = useState(business?.modes || ['delivery', 'pickup']);
+  const [catalog, setCatalog] = useState(null); // { types: [...], modes: { delivery: 'Delivery', ... } }
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState('');
@@ -24,14 +28,30 @@ export default function ShopSetup({ business, onChanged }) {
 
   const link = business ? `${window.location.origin}/shop/${business.slug}` : '';
 
+  useEffect(() => {
+    getBusinessTypes().then(setCatalog).catch(() => {});
+  }, []);
+
+  // Picking another kind of business switches to the ways of receiving orders that usually fit it.
+  function pickType(key) {
+    setType(key);
+    const t = catalog?.types.find((x) => x.key === key);
+    if (t) setModes(t.modes);
+  }
+
+  function toggleMode(key) {
+    setModes((list) => (list.includes(key) ? list.filter((m) => m !== key) : [...list, key]));
+  }
+
   async function save(e) {
     e.preventDefault();
     setError('');
     setMessage('');
     setSaving(true);
     try {
-      await (business ? updateBusiness(name, info, areas) : createBusiness(name, info, areas));
-      setMessage(business ? 'Saved.' : 'Your agent is ready. Now upload your price list below.');
+      const shop = { name, info, deliveryAreas: areas, type, typeLabel, modes };
+      await (business ? updateBusiness(shop) : createBusiness(shop));
+      setMessage(business ? 'Saved.' : 'Your agent is ready. Now add your items in the Products tab or upload a price list below.');
       await onChanged();
     } catch (err) {
       setError(err.message);
@@ -87,10 +107,35 @@ export default function ShopSetup({ business, onChanged }) {
       <form className="card" onSubmit={save}>
         <h3>{business ? 'Shop details' : 'Tell us about your shop'}</h3>
         <label>
-          Shop name
+          Business name
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Sharma General Store" required />
         </label>
-        {FIELDS.map(([key, label, placeholder]) => (
+        <label>
+          What kind of business is it?
+          <select value={type} onChange={(e) => pickType(e.target.value)}>
+            {(catalog?.types || [{ key: type, label: type }]).map((t) => (
+              <option key={t.key} value={t.key}>{t.label}</option>
+            ))}
+          </select>
+        </label>
+        {type === 'other' && (
+          <label>
+            Describe it (customers and the assistant will use this)
+            <input value={typeLabel} onChange={(e) => setTypeLabel(e.target.value)} placeholder="Pet shop" maxLength={40} required />
+          </label>
+        )}
+        <div className="modes">
+          <span className="muted small">How can customers receive their order?</span>
+          <div className="mode-row">
+            {Object.entries(catalog?.modes || {}).map(([key, label]) => (
+              <label key={key} className={`check ${modes.includes(key) ? 'on' : ''}`}>
+                <input type="checkbox" checked={modes.includes(key)} onChange={() => toggleMode(key)} />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
+        {FIELDS.filter(([key]) => key !== 'delivery' || modes.includes('delivery')).map(([key, label, placeholder]) => (
           <label key={key}>
             {label}
             <input
@@ -100,10 +145,12 @@ export default function ShopSetup({ business, onChanged }) {
             />
           </label>
         ))}
-        <label>
-          Areas you deliver to (comma separated; leave empty to deliver anywhere)
-          <input value={areas} onChange={(e) => setAreas(e.target.value)} placeholder="Rajendra Nagar, Boring Road, 800016" />
-        </label>
+        {modes.includes('delivery') && (
+          <label>
+            Areas you deliver to (comma separated; leave empty to deliver anywhere)
+            <input value={areas} onChange={(e) => setAreas(e.target.value)} placeholder="Rajendra Nagar, Boring Road, 800016" />
+          </label>
+        )}
         <button className="btn" disabled={saving}>{saving ? 'Saving...' : business ? 'Save' : 'Create my shop agent'}</button>
       </form>
 

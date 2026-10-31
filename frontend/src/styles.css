@@ -169,7 +169,16 @@ input:focus, textarea:focus { border-color: var(--accent); }
 .seg button.on { background: var(--accent-dim); color: var(--text); }
 
 /* products */
-.add-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 8px; }
+.add-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.cat-head { margin: 10px 0 2px; color: var(--muted); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
+.menu-group { display: grid; gap: 8px; }
+
+/* business type and ways to receive orders */
+.card select { padding: 10px 12px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; }
+.mode-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.card label.check { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; padding: 7px 12px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); cursor: pointer; }
+.card label.check.on { background: var(--accent-dim); border-color: var(--accent); color: var(--text); }
+.card label.check input { width: auto; padding: 0; }
 .add-row input, .bulk { padding: 9px 10px; width: 100%; min-width: 0; }
 .bulk { font-family: inherit; resize: vertical; }
 .product-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 0; border-top: 1px solid var(--border); }

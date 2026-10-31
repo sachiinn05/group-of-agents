@@ -30,9 +30,10 @@ export const login = (email, password) => request('/auth/login', { body: { email
 export const signup = (email, password) => request('/auth/signup', { body: { email, password } });
 
 export const getBusiness = () => request('/business');
-export const createBusiness = (name, info, deliveryAreas) => request('/business', { body: { name, info, deliveryAreas } });
-export const updateBusiness = (name, info, deliveryAreas) =>
-  request('/business', { method: 'PUT', body: { name, info, deliveryAreas } });
+// shop = { name, info, deliveryAreas, type, typeLabel, modes }
+export const createBusiness = (shop) => request('/business', { body: shop });
+export const updateBusiness = (shop) => request('/business', { method: 'PUT', body: shop });
+export const getBusinessTypes = () => request('/business/types');
 
 export const getProducts = () => request('/business/products');
 export const addProduct = (product) => request('/business/products', { body: product });
