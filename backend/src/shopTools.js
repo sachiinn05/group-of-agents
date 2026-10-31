@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
-import { Product, Order, Lead } from './db.js';
+import { Product, Order, Lead, Unanswered } from './db.js';
+import { emitToOwner } from './realtime.js';
 import { tokenize } from './knowledge.js';
 import { notifyLead, notifyOrder } from './telegram.js';
 import { MODES, modesFor } from './profiles.js';
@@ -116,6 +117,14 @@ export const TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'flag_unanswered',
+      description: "Record a customer question you could not answer from SHOP INFO, KNOWLEDGE, OFFERS or the tools, so the owner can add the answer. Call it before telling the customer the owner will check.",
+      parameters: { type: 'object', properties: { question: { type: 'string', description: 'The question in a few words' } }, required: ['question'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'save_lead',
       description: 'Save a customer who needs a callback or whose question the owner must answer. Needs a phone number.',
       parameters: {
@@ -133,7 +142,7 @@ export const TOOLS = [
   },
 ];
 
-async function searchProducts(business, args) {
+async function searchProducts(business, args, state) {
   const products = await Product.find({ businessId: business._id }).limit(1000);
   const terms = [...new Set(tokenize(String(args.query || '')))];
   const scored = products
@@ -149,6 +158,9 @@ async function searchProducts(business, args) {
   // A general request like "food" matches no product name. Show some items instead of nothing.
   const noMatch = scored.length === 0 && products.length > 0;
   if (noMatch) products.slice(0, 8).forEach((p) => scored.push({ p, score: 0 }));
+  // The customer wanted something the list does not have: record it for the owner ourselves,
+  // rather than trusting the model to remember to.
+  if (noMatch && terms.length) await flagUnanswered(business, { question: String(args.query).trim() }, state);
   return {
     ...(noMatch && { note: 'No exact match. These are some of the shop\'s items. Show them and tell the customer they can tap Menu to see everything.' }),
     products: scored.map(({ p }) => ({
@@ -224,8 +236,10 @@ export async function placeOrder(business, sessionId, args, state) {
     note: String(args.note || '').trim().slice(0, 300),
     items,
     total,
+    lang: args.lang === 'hi' ? 'hi' : 'en',
   });
   notifyOrder(business, order);
+  emitToOwner(business._id, 'orders:changed');
   const payUrl = upiLink(business, order);
   state.orders.push({ id: order.id, shortId: shortId(order), total, payUrl });
   return {
@@ -301,6 +315,23 @@ async function myOrders(business, sessionId) {
   };
 }
 
+// Counts a question the agent could not answer, so the owner sees what customers keep asking.
+async function flagUnanswered(business, args, state) {
+  const question = String(args.question || '').trim().slice(0, 200);
+  if (question.length < 3) return { error: 'Say what the question was.' };
+  // Count a question once per message, even if both the search and the model record it.
+  const key = question.toLowerCase();
+  if (state.flagged?.has(key)) return { ok: true, message: 'Already recorded.' };
+  (state.flagged ||= new Set()).add(key);
+  await Unanswered.findOneAndUpdate(
+    { businessId: business._id, key },
+    { $set: { question, lastAskedAt: new Date(), handled: false }, $inc: { count: 1 } },
+    { upsert: true }
+  );
+  emitToOwner(business._id, 'unanswered:changed');
+  return { ok: true, message: 'Recorded for the owner. Now tell the customer the owner will check, and ask for their name and phone with save_lead.' };
+}
+
 async function saveLead(business, sessionId, args, state) {
   const phone = validPhone(args.phone);
   if (!phone) return { error: 'That phone number looks invalid or missing. Ask the customer for a valid number.' };
@@ -311,12 +342,13 @@ async function saveLead(business, sessionId, args, state) {
     await Lead.updateOne({ _id: existing._id }, fields);
     // Alert again only if the details actually changed.
     if (fields.note !== existing.note) {
-      notifyLead(business, { phone, name: fields.name || existing.name, note: fields.note }, { updated: true });
+      notifyLead(business, { phone, sessionId, name: fields.name || existing.name, note: fields.note }, { updated: true });
     }
   } else {
     await Lead.create({ businessId: business._id, sessionId, phone, ...fields });
-    notifyLead(business, { phone, ...fields });
+    notifyLead(business, { phone, sessionId, ...fields });
   }
+  emitToOwner(business._id, 'leads:changed');
   state.leadSaved = true;
   return { ok: true, message: 'Saved. The owner will contact the customer.' };
 }
@@ -326,11 +358,12 @@ export async function executeTool(name, args, ctx) {
   const { business, sessionId, state } = ctx;
   try {
     const result =
-      name === 'search_products' ? await searchProducts(business, args)
-      : name === 'place_order' ? await placeOrder(business, sessionId, args, state)
+      name === 'search_products' ? await searchProducts(business, args, state)
+      : name === 'place_order' ? await placeOrder(business, sessionId, { ...args, lang: state.lang }, state)
       : name === 'update_cart' ? await updateCart(business, args, state)
       : name === 'save_customer_details' ? saveCustomerDetails(args, state)
       : name === 'my_orders' ? await myOrders(business, sessionId)
+      : name === 'flag_unanswered' ? await flagUnanswered(business, args, state)
       : name === 'save_lead' ? await saveLead(business, sessionId, args, state)
       : { error: `Unknown tool ${name}` };
     return JSON.stringify(result);

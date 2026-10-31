@@ -26,11 +26,20 @@ const view = (o) => ({
 });
 
 // What the customer is told in their chat when the owner changes an order's status.
+// In the language the customer chose for the page.
 const STATUS_MESSAGES = {
-  accepted: (n) => `✅ Good news! Your order #${n} was accepted by the shop.`,
-  out_for_delivery: (n) => `🚚 Your order #${n} is out for delivery.`,
-  delivered: (n) => `📦 Your order #${n} was delivered. Please rate it in the Orders tab.`,
-  cancelled: (n) => `❌ Sorry, your order #${n} was cancelled by the shop. Please contact the shop for details.`,
+  en: {
+    accepted: (n) => `✅ Good news! Your order #${n} was accepted by the shop.`,
+    out_for_delivery: (n) => `🚚 Your order #${n} is out for delivery.`,
+    delivered: (n) => `📦 Your order #${n} was delivered. Please rate it in the Orders tab.`,
+    cancelled: (n) => `❌ Sorry, your order #${n} was cancelled by the shop. Please contact the shop for details.`,
+  },
+  hi: {
+    accepted: (n) => `✅ खुशखबरी! आपका ऑर्डर #${n} दुकान ने स्वीकार कर लिया है।`,
+    out_for_delivery: (n) => `🚚 आपका ऑर्डर #${n} डिलीवरी के लिए निकल गया है।`,
+    delivered: (n) => `📦 आपका ऑर्डर #${n} डिलीवर हो गया। कृपया Orders टैब में रेटिंग दें।`,
+    cancelled: (n) => `❌ क्षमा करें, आपका ऑर्डर #${n} दुकान ने रद्द कर दिया है। कृपया दुकान से संपर्क करें।`,
+  },
 };
 
 router.get('/', async (req, res) => {
@@ -68,7 +77,7 @@ router.patch('/:id', async (req, res) => {
   await order.save();
 
   // Tell the customer in their chat, so they see it without opening the Orders tab.
-  const text = changed && STATUS_MESSAGES[status]?.(shortId(order));
+  const text = changed && (STATUS_MESSAGES[order.lang] || STATUS_MESSAGES.en)[status]?.(shortId(order));
   if (text) await PublicMessage.create({ businessId: order.businessId, sessionId: order.sessionId, role: 'assistant', content: text });
 
   // Push it live to the customer's open page, so they do not have to refresh.

@@ -6,6 +6,8 @@ import { shopPrompt } from './shopPrompt.js';
 import { runToolLoop } from './toolLoop.js';
 import { TOOLS, executeTool, placeOrder, isAvailable, customerOrder } from './shopTools.js';
 import { MODES, profileFor, modesFor, typeLabelFor } from './profiles.js';
+import { activeOffers } from './offers.js';
+import { emitToOwner } from './realtime.js';
 
 // Customer-facing routes. No login: anyone with the shop link can chat.
 const router = Router();
@@ -62,6 +64,7 @@ router.get('/:slug/products', async (req, res) => {
     deliveryAreas: business.deliveryAreas || [],
     menuLabel: profile.menuLabel, // the browse tab's name: Menu, Products, Medicines, Services
     kind: typeLabelFor(business),
+    offers: (await activeOffers(business._id)).map((o) => o.text),
     modes: modesFor(business).map((key) => ({ key, label: MODES[key] })),
     products: products.map((p) => ({
       id: p.id,
@@ -94,8 +97,12 @@ router.post('/:slug/orders', async (req, res) => {
     businessId: business._id,
     sessionId,
     role: 'assistant',
-    content: `Your order #${placed.shortId} for ₹${placed.total} was sent to the shop. They will confirm it soon.`,
+    content:
+      req.body.lang === 'hi'
+        ? `आपका ऑर्डर #${placed.shortId} (₹${placed.total}) दुकान को भेज दिया गया है। वे जल्दी ही इसे कन्फर्म करेंगे।`
+        : `Your order #${placed.shortId} for ₹${placed.total} was sent to the shop. They will confirm it soon.`,
   });
+  emitToOwner(business._id, 'chats:changed');
   res.status(201).json({ order: placed });
 });
 
@@ -121,6 +128,7 @@ router.post('/:slug/orders/:id/feedback', async (req, res) => {
   if (order.feedback?.rating) return res.status(409).json({ error: 'Already rated. Thank you!' });
   order.feedback = { rating, comment: String(req.body.comment || '').trim().slice(0, 300) };
   await order.save();
+  emitToOwner(business._id, 'orders:changed');
   res.json({ ok: true });
 });
 
@@ -137,23 +145,30 @@ router.post('/:slug/chat', async (req, res) => {
   if (!SESSION_RE.test(sessionId)) return res.status(400).json({ error: 'invalid sessionId' });
 
   await PublicMessage.create({ businessId: business._id, sessionId, role: 'user', content: message });
+  emitToOwner(business._id, 'chats:changed');
   const recent = await PublicMessage.find({ businessId: business._id, sessionId }).sort({ _id: -1 }).limit(HISTORY);
-  const history = recent.reverse().map((m) => ({ role: m.role, content: m.content }));
+  // A message the shop owner wrote is shown to the agent as such, so it does not repeat or contradict it.
+  const history = recent.reverse().map((m) =>
+    m.role === 'owner' ? { role: 'assistant', content: `(The shop owner wrote to the customer: ${m.content})` } : { role: m.role, content: m.content }
+  );
 
   // Search the owner's documents using the last two things the customer said.
   const query = history.filter((m) => m.role === 'user').slice(-2).map((m) => m.content).join(' ');
-  const state = { leadSaved: false, orders: [], cartUpdates: [], profile: null };
+  const lang = req.body.lang === 'hi' ? 'hi' : 'en'; // the language the customer picked for the page
+  const state = { leadSaved: false, orders: [], cartUpdates: [], profile: null, lang };
   try {
     const knowledge = await findKnowledge(business._id, query);
     const cartText = await describeCart(business, req.body.cart);
+    const offers = (await activeOffers(business._id)).map((o) => o.text);
     const reply =
       (await runToolLoop({
-        systemPrompt: shopPrompt(business, knowledge, cartText),
+        systemPrompt: shopPrompt(business, knowledge, cartText, { offers, lang }),
         history,
         tools: TOOLS,
         execute: (name, args) => executeTool(name, args, { business, sessionId, state }),
       })) || 'Sorry, I could not answer that. Please try again.';
     await PublicMessage.create({ businessId: business._id, sessionId, role: 'assistant', content: reply });
+    emitToOwner(business._id, 'chats:changed');
     res.json({ reply, leadSaved: state.leadSaved, orders: state.orders, cartUpdates: state.cartUpdates, profile: state.profile });
   } catch (e) {
     console.error('public chat failed:', e.message);

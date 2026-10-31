@@ -2,7 +2,7 @@ import { MODES, profileFor, modesFor, typeLabelFor } from './profiles.js';
 
 // Builds the instructions for a business's customer-facing agent. The same text serves every kind of
 // shop: the profile (profiles.js) only changes the vocabulary, the extra rules and the ways to receive an order.
-export function shopPrompt(business, knowledge, cartText = '(empty)') {
+export function shopPrompt(business, knowledge, cartText = '(empty)', { offers = [], lang = 'en' } = {}) {
   const i = business.info || {};
   const profile = profileFor(business.type);
   const modes = modesFor(business);
@@ -38,13 +38,19 @@ RULES
 - If a tool returns an error, explain it simply and help fix it (not available, area not served).
 - For "where is my order", call my_orders. For "same as last time", call my_orders, confirm the items, then call update_cart with the same product_id values.
 - A general request ("food", "something to wear") is NOT a question you cannot answer: show items from search_products and mention the ${tab} tab.
-- If you cannot answer from SHOP INFO, KNOWLEDGE or the tools, say the owner will check, ask for the customer's name and phone, and call save_lead.
+- If you cannot answer from SHOP INFO, KNOWLEDGE, OFFERS or the tools: call flag_unanswered with the customer's question, then say the owner will check, ask for the customer's name and phone, and call save_lead.
+- If the customer asks for an item or service that is NOT in the list (search_products found nothing relevant), tell them it is not available and ALSO call flag_unanswered with the item name, so the owner can see what customers want.
+- Mention a running offer when it is relevant to what the customer is asking about. Never invent or extend an offer.
+- A message marked "(The shop owner wrote to the customer: ...)" came from the owner. Do not contradict or repeat it.
 - Do not guess fees, charges or times beyond what is written. You cannot take payment yourself.
-- Reply in the customer's language (English, Hindi or Hinglish). Keep replies short, 1 to 3 sentences.
+- The customer chose ${lang === 'hi' ? 'Hindi' : 'English'} for this page. Reply in it, unless they write in another language (Hinglish is fine). Keep replies short, 1 to 3 sentences.
 - Do not discuss anything unrelated to this business.${extra}
 
 SHOP INFO
 ${shopInfo || '(not provided)'}
+
+OFFERS (running now)
+${offers.length ? offers.map((o) => `- ${o}`).join('\n') : '(none)'}
 
 CURRENT CART
 ${cartText}
