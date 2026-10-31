@@ -23,6 +23,17 @@ function rateLimited(ip) {
   return recent.length > 20;
 }
 
+// The page sends what is in the customer's cart with each message. The agent reads it, so it
+// knows what is already there instead of adding the same items again.
+async function describeCart(business, cart) {
+  if (!cart || typeof cart !== 'object') return '(empty)';
+  const ids = Object.keys(cart).filter((id) => mongoose.isValidObjectId(id) && Number(cart[id]) > 0).slice(0, 30);
+  if (ids.length === 0) return '(empty)';
+  const products = await Product.find({ _id: { $in: ids }, businessId: business._id });
+  const lines = products.map((p) => `${Number(cart[p.id])} x ${p.name}${p.unit ? ` (${p.unit})` : ''} [product_id ${p.id}]`);
+  return lines.join('\n') || '(empty)';
+}
+
 // What a customer may see about their own order.
 const customerOrder = (business, o) => ({
   id: o.id,
@@ -131,18 +142,19 @@ router.post('/:slug/chat', async (req, res) => {
 
   // Search the owner's documents using the last two things the customer said.
   const query = history.filter((m) => m.role === 'user').slice(-2).map((m) => m.content).join(' ');
-  const state = { leadSaved: false, orders: [] };
+  const state = { leadSaved: false, orders: [], cartUpdates: [], profile: null };
   try {
     const knowledge = await findKnowledge(business._id, query);
+    const cartText = await describeCart(business, req.body.cart);
     const reply =
       (await runToolLoop({
-        systemPrompt: shopPrompt(business, knowledge),
+        systemPrompt: shopPrompt(business, knowledge, cartText),
         history,
         tools: TOOLS,
         execute: (name, args) => executeTool(name, args, { business, sessionId, state }),
       })) || 'Sorry, I could not answer that. Please try again.';
     await PublicMessage.create({ businessId: business._id, sessionId, role: 'assistant', content: reply });
-    res.json({ reply, leadSaved: state.leadSaved, orders: state.orders });
+    res.json({ reply, leadSaved: state.leadSaved, orders: state.orders, cartUpdates: state.cartUpdates, profile: state.profile });
   } catch (e) {
     console.error('public chat failed:', e.message);
     const busy = e.status === 429;
