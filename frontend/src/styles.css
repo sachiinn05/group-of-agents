@@ -140,6 +140,15 @@ input:focus, textarea:focus { border-color: var(--accent); }
 .shop-head { padding: 14px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .small { font-size: 12px; }
 
+/* language switch, offers bar, owner messages, widget embed */
+.lang-switch { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex-shrink: 0; }
+.lang-switch button { padding: 6px 10px; background: none; border: 0; color: var(--muted); font-size: 13px; font-weight: 600; }
+.lang-switch button.on { background: var(--accent-dim); color: var(--text); }
+.offers-bar { display: flex; flex-direction: column; gap: 4px; padding: 8px 16px; background: #2b2a1c; border-bottom: 1px solid #5c5320; font-size: 13px; }
+.msg.owner { align-self: flex-start; background: #1f3a2b; border: 1px solid #2f6b49; }
+.msg .who { font-size: 12px; color: #8be0b0; margin-bottom: 3px; font-weight: 600; }
+.shop-page.embedded { height: 100dvh; max-width: none; }
+
 /* customer tabs, menu and cart */
 .shop-tabs { display: flex; border-bottom: 1px solid var(--border); }
 .shop-tabs button { flex: 1; padding: 11px 6px; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font-weight: 600; }
@@ -167,6 +176,24 @@ input:focus, textarea:focus { border-color: var(--accent); }
 .seg { display: flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
 .seg button { flex: 1; padding: 9px; background: none; border: 0; color: var(--muted); font-weight: 600; }
 .seg button.on { background: var(--accent-dim); color: var(--text); }
+
+/* share: QR and widget */
+.share { display: grid; gap: 16px; margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--border); }
+.qr-box { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.qr-box img { background: #fff; border-radius: 10px; }
+.qr-actions { display: grid; gap: 8px; justify-items: start; }
+
+/* offers, chats */
+.offer-form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.offer-form > input:first-child { flex: 1 1 220px; padding: 10px 12px; min-width: 0; }
+li.expired { opacity: 0.5; }
+.chat-row { text-align: left; cursor: pointer; width: 100%; color: inherit; }
+.chat-row:hover { background: var(--panel-2); }
+.thread { max-height: 55vh; overflow-y: auto; gap: 10px; }
+.bubble { padding: 9px 12px; border-radius: 10px; background: var(--panel-2); display: grid; gap: 3px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.bubble.user { background: var(--bg); border: 1px solid var(--border); }
+.bubble.owner { background: var(--accent-dim); }
+.bubble .who { font-size: 11px; color: var(--muted); }
 
 /* products */
 .add-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }

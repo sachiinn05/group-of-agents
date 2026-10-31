@@ -5,8 +5,9 @@ import { getShop, getShopHistory, getShopMenu, getShopOrders, sendShopMessage } 
 import ShopOrders from './ShopOrders.jsx';
 import Menu, { rupees } from './Menu.jsx';
 import Cart from './Cart.jsx';
+import { LANGS, initialLang, makeT } from './i18n.js';
 
-// The page a shop's customers see at /shop/<slug>. No login.
+// The page a shop's customers see at /shop/<slug>. No login. Also shown inside the website widget (?embed=1).
 function sessionFor(slug) {
   const key = `shop_session_${slug}`;
   let id = localStorage.getItem(key);
@@ -38,6 +39,8 @@ function saveCustomerDetails(profile) {
 
 export default function ShopChat({ slug }) {
   const [sessionId] = useState(() => sessionFor(slug));
+  const [lang, setLang] = useState(initialLang);
+  const t = useMemo(() => makeT(lang), [lang]);
   const [shop, setShop] = useState(null);
   const [menu, setMenu] = useState(null);
   const [notFound, setNotFound] = useState(false);
@@ -50,6 +53,10 @@ export default function ShopChat({ slug }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const bottom = useRef(null);
+  const viewRef = useRef(view);
+  viewRef.current = view;
+
+  const embedded = new URLSearchParams(window.location.search).has('embed');
 
   const loadOrders = useCallback(
     () => getShopOrders(slug, sessionId).then(setOrders).catch(() => {}),
@@ -67,27 +74,13 @@ export default function ShopChat({ slug }) {
     localStorage.setItem(`shop_cart_${slug}`, JSON.stringify(cart));
   }, [slug, cart]);
 
-  // Cart lines come from the live menu, so removed or sold-out items drop out.
-  const lines = useMemo(
-    () => (menu?.products || []).filter((p) => p.available && cart[p.id] > 0).map((p) => ({ ...p, qty: cart[p.id] })),
-    [menu, cart]
-  );
-  const count = lines.reduce((n, l) => n + l.qty, 0);
-  const total = lines.reduce((s, l) => s + l.price * l.qty, 0);
+  useEffect(() => {
+    localStorage.setItem('shop_lang', lang);
+    document.documentElement.lang = lang;
+  }, [lang]);
 
-  function setQty(id, qty) {
-    setCart((c) => {
-      const next = { ...c };
-      if (qty > 0) next[id] = Math.min(qty, 99);
-      else delete next[id];
-      return next;
-    });
-  }
-
-  // Live updates: when the shop owner accepts, ships or cancels an order, the server pushes it here
-  // over a socket, so the message and the order status appear straight away.
-  const viewRef = useRef(view);
-  viewRef.current = view;
+  // Live updates: when the shop owner accepts, ships or cancels an order, or writes to this customer,
+  // the server pushes it here over a socket, so it appears straight away.
   useEffect(() => {
     const socket = io();
 
@@ -109,6 +102,23 @@ export default function ShopChat({ slug }) {
     return () => socket.close();
   }, [slug, sessionId, loadOrders]);
 
+  // Cart lines come from the live menu, so removed or sold-out items drop out.
+  const lines = useMemo(
+    () => (menu?.products || []).filter((p) => p.available && cart[p.id] > 0).map((p) => ({ ...p, qty: cart[p.id] })),
+    [menu, cart]
+  );
+  const count = lines.reduce((n, l) => n + l.qty, 0);
+  const total = lines.reduce((s, l) => s + l.price * l.qty, 0);
+
+  function setQty(id, qty) {
+    setCart((c) => {
+      const next = { ...c };
+      if (qty > 0) next[id] = Math.min(qty, 99);
+      else delete next[id];
+      return next;
+    });
+  }
+
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, sending, view]);
@@ -121,7 +131,7 @@ export default function ShopChat({ slug }) {
     setMessages((m) => [...m, { role: 'user', content: text }]);
     setSending(true);
     try {
-      const { reply, leadSaved, orders: placed, cartUpdates, profile } = await sendShopMessage(slug, sessionId, text, cart);
+      const { reply, leadSaved, orders: placed, cartUpdates, profile } = await sendShopMessage(slug, sessionId, text, cart, lang);
 
       // The agent may have changed the cart or learned the customer's details: show them in the Cart tab.
       if (cartUpdates?.length) {
@@ -154,83 +164,92 @@ export default function ShopChat({ slug }) {
     setCart({});
     setMessages((m) => [
       ...m,
-      { role: 'assistant', content: `Your order #${order.shortId} for ${rupees(order.total)} was sent to the shop. They will confirm it soon.`, placed: [order] },
+      { role: 'assistant', content: t('orderSent', { n: order.shortId, amount: `₹${order.total}` }), placed: [order] },
     ]);
     loadOrders();
     setView('chat');
     setUnread(0);
   }
 
-  if (notFound) return <div className="auth-wrap"><div className="auth-card"><h1>Shop not found</h1><p>Check the link and try again.</p></div></div>;
-  if (!shop) return <div className="auth-wrap"><p className="muted">Loading...</p></div>;
+  if (notFound) return <div className="auth-wrap"><div className="auth-card"><h1>{t('notFound')}</h1><p>{t('notFoundHint')}</p></div></div>;
+  if (!shop) return <div className="auth-wrap"><p className="muted">{t('loading')}</p></div>;
+
+  const menuLabel = t(`menu.${menu?.menuLabel || 'Menu'}`);
 
   return (
-    <div className="shop-page">
+    <div className={`shop-page ${embedded ? 'embedded' : ''}`}>
       <header className="shop-head">
         <div>
           <h1>{shop.name}</h1>
           <span>{[shop.timings, shop.address].filter(Boolean).join(' · ')}</span>
         </div>
+        <div className="lang-switch" role="group" aria-label="Language">
+          {LANGS.map(([code, label]) => (
+            <button key={code} className={lang === code ? 'on' : ''} onClick={() => setLang(code)}>{label}</button>
+          ))}
+        </div>
       </header>
       <nav className="shop-tabs">
         <button className={view === 'chat' ? 'on' : ''} onClick={() => { setView('chat'); setUnread(0); }}>
-          Chat{unread > 0 && <span className="badge">{unread}</span>}
+          {t('chat')}{unread > 0 && <span className="badge">{unread}</span>}
         </button>
-        <button className={view === 'menu' ? 'on' : ''} onClick={() => setView('menu')}>{menu?.menuLabel || 'Menu'}</button>
-        <button className={view === 'cart' ? 'on' : ''} onClick={() => setView('cart')}>Cart{count ? ` (${count})` : ''}</button>
-        <button className={view === 'orders' ? 'on' : ''} onClick={() => setView('orders')}>Orders{orders.length ? ` (${orders.length})` : ''}</button>
+        <button className={view === 'menu' ? 'on' : ''} onClick={() => setView('menu')}>{menuLabel}</button>
+        <button className={view === 'cart' ? 'on' : ''} onClick={() => setView('cart')}>{t('cart')}{count ? ` (${count})` : ''}</button>
+        <button className={view === 'orders' ? 'on' : ''} onClick={() => setView('orders')}>{t('orders')}{orders.length ? ` (${orders.length})` : ''}</button>
       </nav>
+      {menu?.offers?.length > 0 && (
+        <div className="offers-bar">{menu.offers.map((o) => <span key={o}>🎉 {o}</span>)}</div>
+      )}
 
-      {view === 'menu' && <Menu menu={menu} cart={cart} setQty={setQty} count={count} total={total} onOpenCart={() => setView('cart')} />}
+      {view === 'menu' && <Menu t={t} menu={menu} cart={cart} setQty={setQty} count={count} total={total} onOpenCart={() => setView('cart')} />}
       {view === 'cart' && (
-        <Cart slug={slug} sessionId={sessionId} menu={menu} lines={lines} total={total} setQty={setQty}
+        <Cart t={t} lang={lang} slug={slug} sessionId={sessionId} menu={menu} lines={lines} total={total} setQty={setQty}
           onPlaced={onPlaced} onBrowse={() => setView('menu')} />
       )}
-      {view === 'orders' && <ShopOrders slug={slug} sessionId={sessionId} orders={orders} onChanged={loadOrders} />}
+      {view === 'orders' && <ShopOrders t={t} slug={slug} sessionId={sessionId} orders={orders} onChanged={loadOrders} />}
 
       {view === 'chat' && (
         <>
           <div className="messages">
-            <div className="msg assistant">
-              Hi! Welcome to {shop.name}. Ask me anything, or open <b>{menu?.menuLabel || 'Menu'}</b> to browse and add to your cart.
-            </div>
+            <div className="msg assistant">{t('greeting', { name: shop.name, menu: menuLabel })}</div>
             {messages.map((m, i) => (
               <div key={i} className={`msg ${m.role}`}>
+                {m.role === 'owner' && <div className="who">{t('owner')}</div>}
                 {m.role === 'assistant' ? <Markdown>{m.content}</Markdown> : m.content}
-                {m.leadSaved && <div className="lead-ok">✓ Sent to the shop. They will contact you.</div>}
+                {m.leadSaved && <div className="lead-ok">{t('leadOk')}</div>}
                 {m.cartUpdates?.length > 0 && (
                   <div className="lead-ok">
-                    🛒 Cart updated: {m.cartUpdates.map((u) => (u.qty > 0 ? `${u.qty} × ${u.name}` : `removed ${u.name}`)).join(', ')}
-                    <div><button className="btn small" onClick={() => setView('cart')}>View cart</button></div>
+                    {t('cartUpdated', { items: m.cartUpdates.map((u) => (u.qty > 0 ? `${u.qty} × ${u.name}` : t('removed', { name: u.name }))).join(', ') })}
+                    <div><button className="btn small" onClick={() => setView('cart')}>{t('viewCart')}</button></div>
                   </div>
                 )}
-                {m.profile && <div className="lead-ok">✓ Your details are filled in on the Cart tab.</div>}
+                {m.profile && <div className="lead-ok">{t('detailsFilled')}</div>}
                 {m.placed?.map((o) => (
                   <div key={o.id} className="lead-ok">
-                    ✓ Order #{o.shortId}: {rupees(o.total)}
-                    {o.payUrl && <div><a className="btn small" href={o.payUrl}>Pay {rupees(o.total)} with UPI</a></div>}
+                    {t('orderLine', { n: o.shortId, amount: rupees(o.total) })}
+                    {o.payUrl && <div><a className="btn small" href={o.payUrl}>{t('pay', { amount: rupees(o.total) })}</a></div>}
                   </div>
                 ))}
               </div>
             ))}
-            {sending && <div className="typing">typing...</div>}
+            {sending && <div className="typing">{t('typing')}</div>}
             {error && <div className="error">{error}</div>}
             <div ref={bottom} />
           </div>
           <div className="composer">
             <textarea
               rows={1}
-              placeholder="Type your message..."
+              placeholder={t('placeholder')}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKeyDown}
               maxLength={1000}
             />
-            <button className="btn" onClick={send} disabled={sending || !input.trim()}>Send</button>
+            <button className="btn" onClick={send} disabled={sending || !input.trim()}>{t('send')}</button>
           </div>
         </>
       )}
-      <footer className="shop-foot">Answers come from the shop's own information.</footer>
+      {!embedded && <footer className="shop-foot">{t('footer')}</footer>}
     </div>
   );
 }
