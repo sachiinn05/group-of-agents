@@ -13,18 +13,16 @@ const MODE_LABEL = { delivery: 'Delivery', pickup: 'Pickup from shop', dinein: '
 
 const rupees = (n) => `₹${Number(n).toFixed(2).replace(/\.00$/, '')}`;
 
-export default function Orders() {
+export default function Orders({ signal }) {
   const [orders, setOrders] = useState(null);
   const [error, setError] = useState('');
 
   const load = () => getOrders().then(setOrders).catch((e) => setError(e.message));
 
-  // Refresh every 15 seconds so new orders appear without reloading.
+  // The dashboard bumps `signal` when the server says orders changed, so new orders appear at once.
   useEffect(() => {
     load();
-    const timer = setInterval(load, 15000);
-    return () => clearInterval(timer);
-  }, []);
+  }, [signal]);
 
   async function change(id, status) {
     setError('');

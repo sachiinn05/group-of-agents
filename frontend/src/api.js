@@ -41,6 +41,16 @@ export const bulkAddProducts = (text) => request('/business/products/bulk', { bo
 export const updateProduct = (id, fields) => request(`/business/products/${id}`, { method: 'PATCH', body: fields });
 export const deleteProduct = (id) => request(`/business/products/${id}`, { method: 'DELETE' });
 
+export const getOffers = () => request('/business/offers');
+export const addOffer = (text, expiresOn) => request('/business/offers', { body: { text, expiresOn } });
+export const deleteOffer = (id) => request(`/business/offers/${id}`, { method: 'DELETE' });
+
+export const getChats = () => request('/business/chats');
+export const getChat = (sessionId) => request(`/business/chats/${sessionId}`);
+export const replyToChat = (sessionId, text) => request(`/business/chats/${sessionId}/reply`, { body: { text } });
+export const getUnanswered = () => request('/business/unanswered');
+export const markUnansweredDone = (id) => request(`/business/unanswered/${id}`, { method: 'PATCH', body: {} });
+
 export const getOrders = () => request('/business/orders');
 export const setOrderStatus = (id, status) => request(`/business/orders/${id}`, { method: 'PATCH', body: { status } });
 
@@ -69,5 +79,6 @@ export const getShopOrders = (slug, sessionId) => request(`/public/${slug}/order
 export const rateOrder = (slug, sessionId, orderId, rating, comment) =>
   request(`/public/${slug}/orders/${orderId}/feedback`, { body: { sessionId, rating, comment } });
 // `cart` ({ productId: qty }) goes along so the agent knows what is already in it.
-export const sendShopMessage = (slug, sessionId, message, cart) =>
-  request(`/public/${slug}/chat`, { body: { sessionId, message, cart } });
+// `lang` ('en' or 'hi') is the language the customer chose for the page.
+export const sendShopMessage = (slug, sessionId, message, cart, lang) =>
+  request(`/public/${slug}/chat`, { body: { sessionId, message, cart, lang } });

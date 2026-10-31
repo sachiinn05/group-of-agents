@@ -7,18 +7,16 @@ const STATUSES = [
   ['done', 'Done'],
 ];
 
-export default function Leads() {
+export default function Leads({ signal }) {
   const [leads, setLeads] = useState(null);
   const [error, setError] = useState('');
 
   const load = () => getLeads().then(setLeads).catch((e) => setError(e.message));
 
-  // Refresh every 20 seconds so new customers show up without reloading.
+  // The dashboard bumps `signal` when the server says leads changed, so new customers appear at once.
   useEffect(() => {
     load();
-    const timer = setInterval(load, 20000);
-    return () => clearInterval(timer);
-  }, []);
+  }, [signal]);
 
   async function change(id, status) {
     setLeads((all) => all.map((l) => (l.id === id ? { ...l, status } : l)));
