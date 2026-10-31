@@ -3,6 +3,7 @@ import { askForJson, cleanEmail } from './emailCompose.js';
 import { fetchNewMessages, getConnection, canRead } from './mail.js';
 import { getSettings, deliver, blockReason, fireContactEvent } from './emailEngine.js';
 import { logActivity, logActivityOnce } from './activity.js';
+import { noteDueReply } from './khataEngine.js';
 
 // The Email Agent reading the user's inbox. For each new email it works out who wrote, whether they
 // are replying to something we sent, and what to do: note it, change the contact's status, stop
@@ -89,6 +90,9 @@ async function handleMessage(userId, settings, conn, msg) {
     return finish({ category: 'ignored', reason: `Older than ${MAX_AGE_DAYS} days, so the agent left it alone.` });
   }
 
+  // Someone who owes the user money wrote back: the Payment Reminder Agent pauses its reminders to them.
+  await noteDueReply(userId, msg);
+
   // Who is this? A saved contact, or someone answering an email we sent (even from another address).
   let contact = await Contact.findOne({ userId, email: msg.fromEmail });
   if (!contact) {
@@ -96,10 +100,7 @@ async function handleMessage(userId, settings, conn, msg) {
     const ours = threadIds.length ? await EmailLog.findOne({ userId, messageId: { $in: threadIds }, contactId: { $ne: null } }) : null;
     if (ours) contact = await Contact.findById(ours.contactId);
   }
-  if (!contact) {
-    await logActivity(userId, `Skipped an email from ${msg.fromEmail}: not one of your contacts.`, 'info');
-    return finish({ category: 'ignored', reason: 'Not from one of your contacts, so the agent left it alone.' });
-  }
+  if (!contact) return finish({ category: 'ignored', reason: 'Not from one of your contacts, so the agent left it alone.' });
 
   const who = contact.name || contact.email;
   record.contactId = contact._id;

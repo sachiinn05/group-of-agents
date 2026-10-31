@@ -10,6 +10,7 @@ import orderRoutes from './orders.js';
 import offerRoutes from './offers.js';
 import chatRoutes from './chats.js';
 import emailRoutes from './emailRoutes.js';
+import khataRoutes from './khataRoutes.js';
 import googleRoutes from './google.js';
 import { startEmailScheduler } from './emailScheduler.js';
 import { startTelegramPolling } from './telegram.js';
@@ -26,6 +27,7 @@ app.use('/business', chatRoutes); // owner: chats, replies, unanswered questions
 app.use('/business', businessRoutes); // owner: shop, documents, leads
 app.use('/public', publicChatRoutes); // customers: chat with a shop's agent (no login)
 app.use('/email', emailRoutes); // Email Agent: contacts, situations, log, chat
+app.use('/khata', khataRoutes); // Payment Reminder Agent: dues, payments, reminders
 app.use('/google', googleRoutes); // connect Gmail for the Email Agent
 
 const port = process.env.PORT || 5000;

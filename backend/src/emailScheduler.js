@@ -1,10 +1,11 @@
-import { Rule, EmailSettings } from './db.js';
+import { Rule, EmailSettings, Due } from './db.js';
 import { runForUser } from './emailEngine.js';
+import { runKhata } from './khataEngine.js';
 import { syncInbox } from './inbox.js';
 
-// Every minute the Email Agent does two things for each user:
-//   1. checks the situations ("5 days with no reply") and sends the emails that are due
-//   2. reads the inbox, so replies are noticed and answered
+// Every minute the agents that work on a schedule do their rounds for each user:
+//   Email Agent:             read the inbox, then send the emails its situations call for
+//   Payment Reminder Agent:  read the inbox (a reply pauses reminders), then send the reminders that are due
 // It runs inside the backend process, so the backend has to be running.
 let running = false;
 
@@ -13,14 +14,16 @@ export function startEmailScheduler() {
     if (running) return;
     running = true;
     try {
-      const withRules = await Rule.distinct('userId', { enabled: true });
-      const watchingInbox = await EmailSettings.distinct('userId', { inboxMode: { $ne: 'off' }, paused: false });
-      for (const userId of new Set([...withRules, ...watchingInbox].map(String))) {
-        await syncInbox(userId); // reply first, so a person who just answered is not followed up
-        if (withRules.some((id) => String(id) === userId)) await runForUser(userId);
+      const withRules = (await Rule.distinct('userId', { enabled: true })).map(String);
+      const withDues = (await Due.distinct('userId', { status: 'unpaid', optedOut: false })).map(String);
+      const watchingInbox = (await EmailSettings.distinct('userId', { inboxMode: { $ne: 'off' }, paused: false })).map(String);
+      for (const userId of new Set([...withRules, ...withDues, ...watchingInbox])) {
+        await syncInbox(userId); // read replies first, so someone who just answered is not chased
+        if (withRules.includes(userId)) await runForUser(userId);
+        if (withDues.includes(userId)) await runKhata(userId);
       }
     } catch (e) {
-      console.error('email scheduler failed:', e.message);
+      console.error('scheduler failed:', e.message);
     } finally {
       running = false;
     }
