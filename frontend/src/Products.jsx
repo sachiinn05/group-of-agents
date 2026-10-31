@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { getProducts, addProduct, bulkAddProducts, updateProduct, deleteProduct } from './api.js';
 
-const blank = { name: '', unit: '', price: '', stockQty: '' };
+const blank = { name: '', unit: '', price: '', category: '', note: '', stockQty: '' };
 
 // One product line. Edits save when you leave the field.
 function Row({ product, onChange, onRemove, onError }) {
@@ -20,7 +20,7 @@ function Row({ product, onChange, onRemove, onError }) {
     <div className={`product-row ${product.inStock ? '' : 'off'}`}>
       <div className="product-name">
         <strong>{product.name}</strong>
-        <span className="muted">{product.unit}</span>
+        <span className="muted">{[product.unit, product.category, product.note].filter(Boolean).join(' · ')}</span>
       </div>
       <label className="mini">
         ₹
@@ -40,7 +40,7 @@ function Row({ product, onChange, onRemove, onError }) {
   );
 }
 
-export default function Products() {
+export default function Products({ example = 'Basmati Rice | 1 kg | 140 | Grocery' }) {
   const [products, setProducts] = useState(null);
   const [form, setForm] = useState(blank);
   const [bulk, setBulk] = useState('');
@@ -99,6 +99,8 @@ export default function Products() {
           <input placeholder="Unit (1 kg)" value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} />
           <input type="number" min="0" step="any" placeholder="Price ₹" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required />
           <input type="number" min="0" step="any" placeholder="Stock" value={form.stockQty} onChange={(e) => setForm({ ...form, stockQty: e.target.value })} />
+          <input placeholder="Category (optional)" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+          <input placeholder="Note: veg, size M, needs prescription..." value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
         </div>
         <div className="link-row">
           <button className="btn small">Add product</button>
@@ -107,7 +109,7 @@ export default function Products() {
         {showBulk && (
           <>
             <textarea className="bulk" rows={6} value={bulk} onChange={(e) => setBulk(e.target.value)}
-              placeholder={'One product per line:\nBasmati Rice | 1 kg | 140\nSugar | 1 kg | 46\nSoap | 25'} />
+              placeholder={`One item per line: name | unit | price | category | note\n${example}\nOr simply: name | price`} />
             <button type="button" className="btn small" onClick={addBulk} disabled={!bulk.trim()}>Add all</button>
           </>
         )}

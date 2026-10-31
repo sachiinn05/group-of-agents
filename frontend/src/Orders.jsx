@@ -9,6 +9,8 @@ export const STATUS_LABEL = {
   cancelled: 'Cancelled',
 };
 
+const MODE_LABEL = { delivery: 'Delivery', pickup: 'Pickup from shop', dinein: 'Dine-in', appointment: 'Appointment' };
+
 const rupees = (n) => `₹${Number(n).toFixed(2).replace(/\.00$/, '')}`;
 
 export default function Orders() {
@@ -51,7 +53,10 @@ export default function Orders() {
           <div>
             {o.customerName || 'Customer'} · <a href={`tel:${o.phone}`}>{o.phone}</a>
           </div>
-          <div className="muted">{o.fulfilment === 'pickup' ? 'Pickup from shop' : `Deliver to: ${o.address}`}</div>
+          <div className="muted">
+            {o.fulfilment === 'delivery' ? `Deliver to: ${o.address}` : MODE_LABEL[o.fulfilment] || o.fulfilment}
+            {o.fulfilment !== 'delivery' && o.schedule ? `: ${o.schedule}` : ''}
+          </div>
           <ul className="doc-list">
             {o.items.map((i, k) => (
               <li key={k}>

@@ -35,7 +35,7 @@ export default function Dashboard({ onLogout }) {
         </nav>
       )}
       <main className="dash-body">
-        {business && tab === 'products' ? <Products />
+        {business && tab === 'products' ? <Products example={business.example} />
           : business && tab === 'orders' ? <Orders />
           : business && tab === 'leads' ? <Leads />
           : <ShopSetup key={business?.id || 'new'} business={business} onChanged={load} />}
