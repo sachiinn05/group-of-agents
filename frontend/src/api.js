@@ -69,6 +69,26 @@ export const disconnectTelegram = () => request('/business/telegram/disconnect',
 export const getLeads = () => request('/business/leads');
 export const setLeadStatus = (id, status) => request(`/business/leads/${id}`, { method: 'PATCH', body: { status } });
 
+// ---- Email Agent ----
+export const getEmailSettings = () => request('/email/settings');
+export const saveEmailSettings = (fields) => request('/email/settings', { method: 'PUT', body: fields });
+export const getContacts = () => request('/email/contacts');
+export const addContact = (contact) => request('/email/contacts', { body: contact });
+export const addContactsBulk = (text) => request('/email/contacts/bulk', { body: { text } });
+export const updateContact = (id, fields) => request(`/email/contacts/${id}`, { method: 'PATCH', body: fields });
+export const deleteContact = (id) => request(`/email/contacts/${id}`, { method: 'DELETE' });
+export const getRules = () => request('/email/rules');
+export const addRule = (rule) => request('/email/rules', { body: rule });
+export const updateRule = (id, fields) => request(`/email/rules/${id}`, { method: 'PATCH', body: fields });
+export const deleteRule = (id) => request(`/email/rules/${id}`, { method: 'DELETE' });
+export const getEmailLog = () => request('/email/log');
+export const retryEmail = (id) => request(`/email/log/${id}/retry`, { method: 'POST', body: {} });
+export const runEmailRulesNow = () => request('/email/run-now', { method: 'POST', body: {} });
+export const getEmailChat = () => request('/email/chat');
+export const sendEmailChat = (message) => request('/email/chat', { body: { message } });
+export const getGmailUrl = () => request('/google/url');
+export const disconnectGmail = () => request('/google/disconnect', { method: 'POST', body: {} });
+
 // ---- customer (no login) ----
 export const getShop = (slug) => request(`/public/${slug}`);
 export const getShopHistory = (slug, sessionId) => request(`/public/${slug}/history?sessionId=${sessionId}`);

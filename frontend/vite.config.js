@@ -10,6 +10,10 @@ export default defineConfig({
       '/auth': 'http://localhost:5000',
       '/business': 'http://localhost:5000',
       '/public': 'http://localhost:5000',
+      '/email': 'http://localhost:5000',
+      // Google sends the browser to /google/callback on the backend directly, so only these go through here
+      '/google/url': 'http://localhost:5000',
+      '/google/disconnect': 'http://localhost:5000',
       '/socket.io': { target: 'http://localhost:5000', ws: true }, // live order updates
     },
   },

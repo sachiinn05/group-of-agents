@@ -15,7 +15,7 @@ const TABS = [
   ['chats', 'Chats'],
 ];
 
-export default function Dashboard({ onLogout }) {
+export default function Dashboard({ onLogout, onBack }) {
   const [business, setBusiness] = useState(undefined); // undefined = loading, null = no shop yet
   const [tab, setTab] = useState('shop');
   // `signals` goes up each time the server says something changed, so open tabs refetch at once.
@@ -65,7 +65,10 @@ export default function Dashboard({ onLogout }) {
   return (
     <div className="dash">
       <header className="dash-head">
-        <strong>{business?.name || 'Set up your shop'}</strong>
+        <span className="head-left">
+          <button className="link-btn" onClick={onBack}>← All agents</button>
+          <strong>{business?.name || 'Set up your shop'}</strong>
+        </span>
         <button className="logout" onClick={onLogout}>Log out</button>
       </header>
       {business && (
