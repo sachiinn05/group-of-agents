@@ -17,7 +17,9 @@ export const Business = model(
   new Schema(
     {
       ownerId: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
-      type: { type: String, default: 'shop' },
+      type: { type: String, default: 'general' }, // a key of SHOP_TYPES in profiles.js
+      typeLabel: String, // what the owner calls it when type is "other", like "Pet shop"
+      modes: { type: [String], default: [] }, // delivery, pickup, dinein, appointment; empty = the type's defaults
       name: { type: String, required: true },
       slug: { type: String, required: true, unique: true },
       info: {
@@ -92,6 +94,8 @@ export const Product = model(
       businessId: { type: Schema.Types.ObjectId, ref: 'Business', required: true, index: true },
       name: { type: String, required: true },
       unit: { type: String, default: '' }, // what one unit is, like "1 kg" or "pack of 6"
+      category: { type: String, default: '' }, // groups the menu: Starters, Men, Hair...
+      note: { type: String, default: '' }, // shown to customers and the agent: Veg, size M, prescription needed
       price: { type: Number, required: true, min: 0 }, // price of one unit
       inStock: { type: Boolean, default: true },
       stockQty: { type: Number, default: null, min: 0 }, // null = not tracked
@@ -111,8 +115,9 @@ export const Order = model(
       sessionId: { type: String, required: true, index: true },
       customerName: String,
       phone: { type: String, required: true },
-      fulfilment: { type: String, enum: ['delivery', 'pickup'], default: 'delivery' },
+      fulfilment: { type: String, enum: ['delivery', 'pickup', 'dinein', 'appointment'], default: 'delivery' },
       address: String,
+      schedule: String, // table or arrival time (dine-in), pickup time, or the booking date and time
       note: String,
       items: [
         {

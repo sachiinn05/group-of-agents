@@ -6,6 +6,7 @@ import multer from 'multer';
 import { Business, Document, Lead } from './db.js';
 import { requireAuth } from './auth.js';
 import { extractText, isSupported } from './extractText.js';
+import { SHOP_TYPES, MODES, profileFor, modesFor } from './profiles.js';
 
 const router = Router();
 router.use(requireAuth);
@@ -29,16 +30,44 @@ async function makeSlug(name) {
 
 const mine = (req) => Business.findOne({ ownerId: req.userId });
 
+// Checks the business type, its custom label and how orders are received. Only the fields sent are changed.
+function pickType(body) {
+  const fields = {};
+  if (body.type !== undefined) {
+    if (!SHOP_TYPES[body.type]) return { error: 'unknown shop type' };
+    fields.type = body.type;
+    fields.typeLabel = body.type === 'other' ? String(body.typeLabel || '').trim().slice(0, 40) : '';
+  }
+  if (body.modes !== undefined) {
+    const modes = [...new Set(Array.isArray(body.modes) ? body.modes : [])].filter((m) => MODES[m]);
+    if (modes.length === 0) return { error: 'choose at least one way for customers to receive orders' };
+    fields.modes = modes;
+  }
+  return { fields };
+}
+
+// The kinds of business the owner can pick from, with their default ways of receiving orders
+router.get('/types', (req, res) => {
+  res.json({
+    types: Object.entries(SHOP_TYPES).map(([key, t]) => ({ key, label: t.label, modes: t.modes, example: t.example })),
+    modes: MODES,
+  });
+});
+
 // The owner's shop, with its documents
 router.get('/', async (req, res) => {
   const business = await mine(req);
   if (!business) return res.json(null);
   const documents = await Document.find({ businessId: business._id }, 'filename createdAt');
+  const profile = profileFor(business.type);
   res.json({
     id: business.id,
     name: business.name,
     slug: business.slug,
-    type: business.type,
+    type: SHOP_TYPES[business.type] ? business.type : 'general',
+    typeLabel: business.typeLabel || '',
+    modes: modesFor(business),
+    example: profile.example,
     info: business.info,
     deliveryAreas: business.deliveryAreas,
     documents: documents.map((d) => ({ id: d.id, filename: d.filename })),
@@ -50,12 +79,15 @@ router.post('/', async (req, res) => {
   const name = (req.body.name || '').trim();
   if (!name) return res.status(400).json({ error: 'shop name required' });
   if (await mine(req)) return res.status(409).json({ error: 'you already have a shop' });
+  const { fields, error } = pickType(req.body);
+  if (error) return res.status(400).json({ error });
   const business = await Business.create({
     ownerId: req.userId,
     name,
     slug: await makeSlug(name),
     info: pickInfo(req.body.info),
     deliveryAreas: parseAreas(req.body.deliveryAreas),
+    ...fields,
   });
   res.status(201).json({ id: business.id, slug: business.slug });
 });
@@ -64,6 +96,9 @@ router.post('/', async (req, res) => {
 router.put('/', async (req, res) => {
   const business = await mine(req);
   if (!business) return res.status(404).json({ error: 'no shop yet' });
+  const { fields, error } = pickType(req.body);
+  if (error) return res.status(400).json({ error });
+  Object.assign(business, fields);
   if (typeof req.body.name === 'string' && req.body.name.trim()) business.name = req.body.name.trim();
   business.info = { ...business.info.toObject(), ...pickInfo(req.body.info) };
   if (typeof req.body.deliveryAreas === 'string') business.deliveryAreas = parseAreas(req.body.deliveryAreas);
